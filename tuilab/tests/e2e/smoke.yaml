@@ -1,0 +1,17 @@
+# TUI Lab self-test: boot the fixture and quit cleanly.
+# Runs in CI via `tuilab run tests/e2e` (see .github/workflows/ci.yml).
+schema: tui-lab/v1
+name: smoke
+application:
+  command: "cargo"
+  args: ["run", "--offline", "--manifest-path", "tests/fixtures/ratatui-sample/Cargo.toml"]
+terminal:
+  width: 120
+  height: 40
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+      timeout: 30s
+  - press: q
+assertions:
+  - exit_code: 0

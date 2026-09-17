@@ -99,4 +99,11 @@ it, never a second implementation.
     taxonomy over `ScreenView`), `tui-lab-snapshots` (goldens, regex masks, unified
     diff), and a `single_session` YAML end-to-end proof against the fixture.
     Single-session only; registry, `TestContext`, reporters deferred.
-*   **Phase 3 — next.** CLI (`init/run/report`), JUnit/JSON reports, failure bundle.
+*   **Phase 3 — done (Windows-verified).** `tui-lab-core` runner
+    (`TestContext`, step pipeline, cleanup-always, exit assertions),
+    `tui-lab-reporter` (JSON + JUnit re-render), `tuilab` CLI
+    (`init/run/report`, `record` stubbed for v2, sequential runs),
+    self-hosted `tests/e2e` dogfood (smoke + search-flow with committed
+    golden) green via `tuilab run tests/e2e`, e2e job added to CI.
+    Fixed en route: ConPTY children need explicit CWD (`12` §12.2).
+*   **Phase 4 — next.** MCP server (`rmcp`, 9 tools, allowlist + cwd jail).

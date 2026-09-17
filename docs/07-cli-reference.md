@@ -9,25 +9,24 @@ Universal entry point — works with any language app, no app changes.
 tuilab init
 # -> tuilab.yaml + tests/smoke.yaml
 
-# Run all tests
+# Run all tests (defaults to the configured tests dir)
 tuilab run
 
 # Run one file / dir
 tuilab run tests/search.yaml
-tuilab run tests/ --parallel 4 --terminal 120x40
+tuilab run tests/ --terminal 120x40
+# (--parallel arrives in v2; Phase 3 runs sequentially)
 
-# Interactive recording (generates YAML)
+# Interactive recording (v2 — Phase 3 prints a pointer)
 tuilab record --command "./codegraph"
-tuilab record --command "python app.py" -- out.yaml
 
-# View last results
-tuilab report
-tuilab report --format html --open
+# Re-render stored results as JUnit
 tuilab report --format junit --out results.xml
+# (--format html arrives in v2)
 
-# Debug failed test (verbose PTY log + step-through)
+# Debug a failed run (full failure bundle: screens, history, diffs)
 tuilab run tests/search.yaml --debug
-tuilab run tests/search.yaml --debug --step
+# (--step arrives with the interactive runner in v2)
 ```
 
 ## 7.2 `tuilab.yaml` (project config)
@@ -60,7 +59,8 @@ env:
 # .github/workflows/tui.yml
 steps:
   - run: cargo build --release
-  - run: tuilab run --format junit --out results.xml
+  - run: tuilab run tests/
+  - run: tuilab report --format junit --out results.xml
 ```
 
 CI output:

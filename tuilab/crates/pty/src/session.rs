@@ -80,8 +80,18 @@ impl PtySession {
 
         let mut cmd = CommandBuilder::new(&opts.command);
         cmd.args(&opts.args);
-        if let Some(cwd) = &opts.cwd {
-            cmd.cwd(cwd);
+        match &opts.cwd {
+            Some(cwd) => {
+                cmd.cwd(cwd);
+            }
+            // ConPTY children do NOT inherit the parent working directory
+            // unless set explicitly (they land in the profile dir), so
+            // default to it here. Relative suite paths depend on this.
+            None => {
+                if let Ok(dir) = std::env::current_dir() {
+                    cmd.cwd(dir);
+                }
+            }
         }
         let mut saw_term = false;
         for (key, value) in &opts.env {

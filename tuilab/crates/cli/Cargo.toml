@@ -12,3 +12,12 @@ path = "src/main.rs"
 
 [lints]
 workspace = true
+
+[dependencies]
+tui-lab-core = { path = "../core" }
+tui-lab-protocol = { path = "../protocol" }
+tui-lab-reporter = { path = "../reporter" }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"

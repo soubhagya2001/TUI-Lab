@@ -99,6 +99,12 @@ pub fn save_text(dir: &Path, name: &str, width: u16, height: u16, text: &str) ->
     Ok(path)
 }
 
+/// Load a text golden written by [`save_text`].
+pub fn load_text(path: &Path) -> Result<String> {
+    std::fs::read_to_string(path)
+        .map_err(|e| SnapshotError::Io(format!("read {}: {e}", path.display())))
+}
+
 /// Compare live text against a golden with masks applied to both sides.
 pub fn compare_text(expected: &str, actual: &str, masks: &[regex::Regex]) -> CompareOutcome {
     let masked_expected = apply_masks(expected, masks);

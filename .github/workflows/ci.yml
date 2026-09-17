@@ -21,5 +21,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --workspace -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  e2e:
+    name: dogfood e2e (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: tuilab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --offline -p tui-lab-cli
+      - run: cargo run --offline --manifest-path tests/fixtures/ratatui-sample/Cargo.toml --no-run
+      - run: cargo run --offline -p tui-lab-cli -- run tests/e2e

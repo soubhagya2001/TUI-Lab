@@ -1,0 +1,35 @@
+# TUI Lab self-test: search flow with a committed golden snapshot.
+# Runs in CI via `tuilab run tests/e2e` (see .github/workflows/ci.yml).
+schema: tui-lab/v1
+name: search-flow
+application:
+  command: "cargo"
+  args: ["run", "--offline", "--manifest-path", "tests/fixtures/ratatui-sample/Cargo.toml"]
+terminal:
+  width: 120
+  height: 40
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+      timeout: 30s
+  - press: DOWN
+  - press: ENTER
+  - wait_for_text:
+      text: "Selected: beta-chair"
+  - press: ESC
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: "/"
+  - type: "table"
+  - wait_for_text:
+      text: "Search: table"
+  - assert_text:
+      contains: "gamma-table"
+  - assert_text:
+      not_contains: "beta-chair"
+  - snapshot:
+      name: "search-table"
+  - press: ESC
+  - press: q
+assertions:
+  - exit_code: 0

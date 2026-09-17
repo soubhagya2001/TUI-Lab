@@ -27,6 +27,11 @@ TUI Lab App
 *   Console codepage / UTF-8 (`chcp 65001`, `PYTHONUTF8=1`)
 *   Resize behavior + reflow differences
 *   Color depth negotiation (16 vs 256 vs truecolor)
+*   Working directory: ConPTY children do not inherit the parent CWD unless
+    set explicitly (they land in the profile dir). `tui-lab-pty` defaults
+    unset `cwd` to the current process directory.
+*   Child `stderr` shares the PTY stream by default (portable-pty inherits
+    stdio); a separate stderr pipe for clean failure bundles is v2 work.
 *   Key press AND release records: ConPTY delivers both, so apps (and the
     Phase 1 fixture) must filter on press events or every key acts twice —
     caught by the `runtime_smoke` test in Phase 1.

@@ -8,3 +8,7 @@ rust-version.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+tui-lab-core = { path = "../core" }
+serde_json = "1"

@@ -21,6 +21,10 @@ Example assertion in CI: build release binary, then `tuilab run`.
 
 ## 11.3 Failure bundle (capture on every failure)
 
+Phase 3 implements the core subset; `stderr` tail separation and env
+redaction beyond `sensitive` typing arrive in v2 (child stderr currently
+shares the PTY stream — see `12` §12.2).
+
 1.  test step number + action
 2.  expected screen/text
 3.  actual screen (text grid)
