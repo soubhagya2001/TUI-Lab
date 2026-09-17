@@ -7,4 +7,4 @@ pub mod constants;
 pub mod error;
 pub mod utils;
 
-pub use conditions::{evaluate, Condition, ScreenView, Verdict};
+pub use conditions::{condition_from_json, evaluate, Condition, ScreenView, Verdict};

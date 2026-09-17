@@ -6,6 +6,32 @@
 Zero native PTY code in SDKs; single behavior across CLI/MCP/SDK. Native bindings
 (PyO3 / napi-rs) deferred to v3+ on demand.
 
+### 9.1.1 The `tuilab proto` wire contract (Phase 5)
+
+Interactive SDKs speak `tuilab proto`: one JSON action per stdin line (the
+`docs/04` shapes, validated by the shared field table), one JSON response
+per stdout line, logs on stderr. Success is `{"ok": true, ...fields}`;
+failures are `{"ok": false, "error": "..."}`. EOF closes the engine.
+
+```json
+{"action": "launch", "command": "python app.py", "terminal": {"width": 120, "height": 40}}
+{"action": "press", "session_id": "sess_001", "key": "ENTER"}
+{"action": "wait_for_text", "session_id": "sess_001", "text": "Dashboard"}
+{"action": "close", "session_id": "sess_001"}
+```
+
+The contract is pinned by `tuilab/crates/cli/tests/proto_roundtrip.rs`
+(all 9 shapes) — an engine change that breaks SDKs fails there first.
+
+### 9.1.2 Binary resolution and errors (Python SDK)
+
+`find_binary()` order: explicit argument → `TUILAB_BIN` env → `PATH` →
+workspace `target/debug` layout. Engine errors surface as `TuiLabError`
+carrying the reply dict (step/session context intact); transport breakdowns
+(non-JSON, EOF, timeouts) raise the same type. `type(..., sensitive=True)`
+never logs the text. `Runner.run("test.yaml")` shells `tuilab run` and
+returns parsed `reports/results.json`, raising on infra exit codes (2–4).
+
 ```
 Python SDK ----+
 JS SDK --------+--> TUI Lab Test API / Protocol --> tui-lab-core
@@ -32,9 +58,16 @@ CLI, MCP, and all SDKs program against this.
 
 ## 9.2 Priority order (Phase 5)
 
-1.  **Python** (`pip install tui-lab`) — covers Textual/Rich/Urwid.
+1.  **Python** (`pip install tui-lab`) — covers Textual/Rich/Urwid. DONE:
+    `tuilab/sdks/python` (`TuiTest` async API + `Runner.run`), sidecar over
+    `tuilab proto`, pytest suite green on Windows (Linux via CI).
 2.  **JavaScript/TypeScript** (`@tui-lab/sdk`) — covers Ink/blessed.
+    FAST-FOLLOW template: port `_proto.py` (newline framing, TUILAB_BIN
+    resolution) and the `TuiTest` method set 1:1; mirror
+    `test_fixture_flow.py` with the same steps; `npm test` on both OSes.
 3.  **Rust** (`tui-lab-sdk` crate) — covers Ratatui/Cursive/Crossterm.
+    FAST-FOLLOW template: same sidecar path (no core linking per DECIDED),
+    same method set, same fixture flow as a `tokio` integration test.
 4.  Later: Go, Java — only on demand; CLI already covers them.
 
 ## 9.3 Usage sketches

@@ -4,6 +4,8 @@
 pub const CONFIG_FILE: &str = "tuilab.yaml";
 /// Default tests directory.
 pub const TESTS_DIR: &str = "tests";
+/// Maximum JSON-lines action size (SDK sidecar guard).
+pub const MAX_PROTO_LINE_BYTES: usize = 1024 * 1024;
 /// CLI exit codes (docs/07 §7.3).
 pub const EXIT_OK: i32 = 0;
 pub const EXIT_TESTS_FAILED: i32 = 1;

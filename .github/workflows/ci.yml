@@ -37,7 +37,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --offline -p tui-lab-cli
-      - run: cargo run --offline --manifest-path tests/fixtures/ratatui-sample/Cargo.toml --no-run
-      - run: cargo run --offline -p tui-lab-cli -- run tests/e2e
-      - run: cargo test --offline -p tui-lab-mcp --test stdio_probe
+      - run: cargo build -p tui-lab-cli
+      - run: cargo run --manifest-path tests/fixtures/ratatui-sample/Cargo.toml --no-run
+      - run: cargo run -p tui-lab-cli -- run tests/e2e
+      - run: cargo test -p tui-lab-mcp --test stdio_probe
+
+  sdk-python:
+    name: python sdk (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: cargo build -p tui-lab-cli
+        working-directory: tuilab
+      - run: uv run --with pytest python -m pytest tests/ -q
+        working-directory: tuilab/sdks/python

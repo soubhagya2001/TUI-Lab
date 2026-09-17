@@ -11,7 +11,7 @@ use std::time::Duration;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::{tool, tool_handler, tool_router, ServerHandler};
-use tui_lab_assertions::{evaluate, Condition};
+use tui_lab_assertions::{condition_from_json, evaluate};
 use tui_lab_core::{run_file, NewSession, RunOptions, SessionRegistry};
 use tui_lab_input::{encode_key, encode_text};
 use tui_lab_protocol::TestFile;
@@ -258,7 +258,8 @@ impl TuiLabHandler {
             .get_mut(&params.session_id)
             .map_err(|e| tool_error("assert", e))?;
         let text = SessionRegistry::pump_once(session, Duration::from_millis(100));
-        let condition = map_condition(&params.assertion).map_err(|e| tool_error("assert", e))?;
+        let condition =
+            condition_from_json(&params.assertion).map_err(|e| tool_error("assert", e))?;
         let view = live_view(session, &text);
         let verdict = evaluate(&condition, &view);
         Ok(Json(AssertOut {
@@ -388,60 +389,6 @@ impl TuiLabHandler {
     /// Snapshot dir for `tui_run_test` (re-locked helper).
     async fn snapshot_dir(&self) -> PathBuf {
         self.state.lock().await.root.join("tests/snapshots")
-    }
-}
-
-/// Map a JSON assertion object onto an engine condition.
-fn map_condition(value: &serde_json::Value) -> Result<Condition, String> {
-    use tui_lab_assertions::Condition as C;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| "assertion must be an object".to_string())?;
-    let kind = obj
-        .get("type")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "assertion needs a string \"type\"".to_string())?;
-    let text_field = |name: &str| {
-        obj.get(name)
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_string)
-            .ok_or_else(|| format!("{kind} needs a string {name:?}"))
-    };
-    match kind {
-        "text_visible" => Ok(C::TextVisible(text_field("text")?)),
-        "text_not_visible" => Ok(C::TextNotVisible(text_field("text")?)),
-        "text_regex" => Ok(C::TextRegex(text_field("text")?)),
-        "exact_text" => Ok(C::ExactText(text_field("text")?)),
-        "cursor_position" => {
-            let row = obj
-                .get("row")
-                .and_then(serde_json::Value::as_u64)
-                .ok_or_else(|| "cursor_position needs numeric row".to_string())?
-                as usize;
-            let col = obj
-                .get("col")
-                .and_then(serde_json::Value::as_u64)
-                .ok_or_else(|| "cursor_position needs numeric col".to_string())?
-                as usize;
-            Ok(C::CursorPosition { row, col })
-        }
-        "screen_changed" => {
-            let expected = obj
-                .get("changed")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(true);
-            Ok(C::ScreenChanged(expected))
-        }
-        "exit_code" => {
-            let code = obj
-                .get("code")
-                .and_then(serde_json::Value::as_i64)
-                .ok_or_else(|| "exit_code needs numeric code".to_string())?
-                as i32;
-            Ok(C::ExitCode(code))
-        }
-        "not_crashed" => Ok(C::NotCrashed),
-        other => Err(format!("unknown assertion type: {other}")),
     }
 }
 

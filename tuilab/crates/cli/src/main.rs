@@ -1,9 +1,9 @@
-//! `tuilab` CLI: init/run/record/report (docs/07).
+//! `tuilab` CLI: init/run/report/record/proto (docs/07, docs/09).
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use tui_lab_cli::commands;
+use tui_lab_cli::{commands, proto};
 
 /// TUI Lab: black-box testing for terminal applications.
 #[derive(Debug, Parser)]
@@ -51,6 +51,8 @@ enum Commands {
         #[arg(long)]
         command: Option<String>,
     },
+    /// JSON-lines engine mode for SDK sidecars (docs/09).
+    Proto,
 }
 
 /// Parse `120x40` terminal geometry.
@@ -85,6 +87,7 @@ async fn main() {
             results,
         } => commands::report(&format, &out, &results),
         Commands::Record { .. } => commands::record(),
+        Commands::Proto => proto::serve().await,
     };
     std::process::exit(code);
 }

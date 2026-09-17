@@ -17,8 +17,12 @@ tuilab/tests/**/*.log
 # SDK build artifacts
 sdks/python/dist/
 sdks/python/*.egg-info/
+sdks/python/uv.lock
+sdks/python/tests/snapshots/
 sdks/javascript/dist/
 sdks/javascript/node_modules/
+.venv/
+.pytest_cache/
 __pycache__/
 *.py[cod]
 

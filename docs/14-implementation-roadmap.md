@@ -112,4 +112,10 @@ it, never a second implementation.
     `tuilab.example.yaml`, stdio handshake probe + Mode A/B tests green.
     Fixed en route: registry warm-up must feed (not discard) the ConPTY
     handshake; snapshot golden paths unified via `text_golden_path`.
-*   **Phase 5 — next.** Thin SDKs (Python → JS/TS → Rust sidecars).
+*   **Phase 5 — done (Windows-verified).** `tuilab proto` JSON-lines mode
+    (all 9 actions, contract test), shared JSON→Condition mapper (MCP
+    deduplicated onto it), Python `tui-lab` SDK (`TuiTest` async API +
+    `Runner.run`, 5 pytest green), `docs/09` fast-follow checklists for
+    JS/TS + Rust, CI `sdk-python` job.
+*   **Phase 6 — next.** Hardening + v2 (recorder, parallel fan-out, HTML
+    reports, mouse, region asserts) and optional instrumentation adapters.

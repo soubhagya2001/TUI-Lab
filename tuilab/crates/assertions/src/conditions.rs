@@ -68,6 +68,64 @@ pub struct Verdict {
     pub detail: String,
 }
 
+/// Map a JSON assertion object onto a [`Condition`].
+///
+/// Accepted shapes (`type` discriminates):
+/// `text_visible` / `text_not_visible` / `text_regex` / `exact_text` with
+/// `text`; `cursor_position` with `row`/`col`; `screen_changed` with optional
+/// `changed` (default true); `exit_code` with `code`; `not_crashed`.
+/// Shared by the MCP server and the `tuilab proto` sidecar mode.
+pub fn condition_from_json(value: &serde_json::Value) -> Result<Condition, String> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| "assertion must be an object".to_string())?;
+    let kind = obj
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "assertion needs a string \"type\"".to_string())?;
+    let text_field = |name: &str| {
+        obj.get(name)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| format!("{kind} needs a string {name:?}"))
+    };
+    match kind {
+        "text_visible" => Ok(Condition::TextVisible(text_field("text")?)),
+        "text_not_visible" => Ok(Condition::TextNotVisible(text_field("text")?)),
+        "text_regex" => Ok(Condition::TextRegex(text_field("text")?)),
+        "exact_text" => Ok(Condition::ExactText(text_field("text")?)),
+        "cursor_position" => {
+            let row = obj
+                .get("row")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| "cursor_position needs numeric row".to_string())?
+                as usize;
+            let col = obj
+                .get("col")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| "cursor_position needs numeric col".to_string())?
+                as usize;
+            Ok(Condition::CursorPosition { row, col })
+        }
+        "screen_changed" => {
+            let expected = obj
+                .get("changed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            Ok(Condition::ScreenChanged(expected))
+        }
+        "exit_code" => {
+            let code = obj
+                .get("code")
+                .and_then(serde_json::Value::as_i64)
+                .ok_or_else(|| "exit_code needs numeric code".to_string())?
+                as i32;
+            Ok(Condition::ExitCode(code))
+        }
+        "not_crashed" => Ok(Condition::NotCrashed),
+        other => Err(format!("unknown assertion type: {other}")),
+    }
+}
 /// Evaluate one condition against a view. Never panics — a bad regex is a
 /// failed verdict, since failures must feed reports, not crash runners.
 pub fn evaluate(condition: &Condition, view: &ScreenView) -> Verdict {

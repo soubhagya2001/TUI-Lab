@@ -1214,6 +1214,7 @@ name = "tui-lab-assertions"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "serde_json",
 ]
 
 [[package]]
@@ -1222,11 +1223,18 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tokio",
+ "tui-lab-assertions",
  "tui-lab-core",
+ "tui-lab-input",
  "tui-lab-protocol",
+ "tui-lab-pty",
  "tui-lab-reporter",
+ "tui-lab-runtime",
+ "tui-lab-snapshots",
+ "tui-lab-terminal",
 ]
 
 [[package]]

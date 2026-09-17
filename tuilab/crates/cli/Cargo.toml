@@ -17,7 +17,14 @@ workspace = true
 tui-lab-core = { path = "../core" }
 tui-lab-protocol = { path = "../protocol" }
 tui-lab-reporter = { path = "../reporter" }
+tui-lab-input = { path = "../input" }
+tui-lab-pty = { path = "../pty" }
+tui-lab-terminal = { path = "../terminal" }
+tui-lab-runtime = { path = "../runtime" }
+tui-lab-assertions = { path = "../assertions" }
+tui-lab-snapshots = { path = "../snapshots" }
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "io-util", "io-std"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 serde_yaml = "0.9"

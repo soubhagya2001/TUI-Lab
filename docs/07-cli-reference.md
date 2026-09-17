@@ -27,6 +27,9 @@ tuilab report --format junit --out results.xml
 # Debug a failed run (full failure bundle: screens, history, diffs)
 tuilab run tests/search.yaml --debug
 # (--step arrives with the interactive runner in v2)
+
+# JSON-lines engine mode for SDK sidecars (docs/09) — one action in, one reply out
+tuilab proto
 ```
 
 ## 7.2 `tuilab.yaml` (project config)
