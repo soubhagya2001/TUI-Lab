@@ -1,0 +1,15 @@
+[package]
+name = "tui-lab-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tui-lab-pty = { path = "../pty" }
+tui-lab-terminal = { path = "../terminal" }
+tui-lab-input = { path = "../input" }

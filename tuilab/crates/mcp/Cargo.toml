@@ -1,0 +1,14 @@
+[package]
+name = "tui-lab-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "tuilab-mcp"
+path = "src/main.rs"
+
+[lints]
+workspace = true

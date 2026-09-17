@@ -1,0 +1,13 @@
+[package]
+name = "ratatui-sample"
+version = "0.1.0"
+edition = "2021"
+
+# Test fixture for TUI Lab Phase 1 (NOT a workspace member, NOT shipped).
+# Minimal deterministic app: list -> /-search -> ENTER detail -> q quit.
+
+[dependencies]
+ratatui = "0.30"
+crossterm = "0.29"
+
+[workspace]

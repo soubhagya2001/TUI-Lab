@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tui-lab.dev/schemas/test-schema-v1.json",
+  "title": "TUI Lab test suite (v1 skeleton — full schema arrives in Phase 2)",
+  "description": "Portable test definition per docs/05-test-definition-dsl.md.",
+  "type": "object",
+  "required": ["schema", "name", "application", "steps"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "tui-lab/v1"
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "application": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "environment": { "type": "object" },
+    "terminal": {
+      "type": "object",
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "timeout": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "setup": { "type": "array" },
+    "steps": { "type": "array" },
+    "cleanup": { "type": "array" },
+    "assertions": { "type": "array" }
+  },
+  "additionalProperties": false
+}

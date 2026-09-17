@@ -1,0 +1,41 @@
+# Rust workspace (binaries ship: lockfile is committed intentionally)
+# NOTE: no `Cargo.lock` ignore — tuilab builds tuilab/tuilab-mcp binaries.
+/tuilab/target/
+**/target/
+**/*.rs.bk
+
+# TUI Lab test artifacts (never commit)
+reports/
+**/snapshots/*.new
+**/snapshots/*.actual.*
+tuilab/tests/**/*.log
+*.pty.log
+
+# Recorder output drafts
+/recordings/*.draft.yaml
+
+# SDK build artifacts
+sdks/python/dist/
+sdks/python/*.egg-info/
+sdks/javascript/dist/
+sdks/javascript/node_modules/
+__pycache__/
+*.py[cod]
+
+# Exported chat dumps (design source; distilled into docs/, never committed)
+*.mhtml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.orig
+
+# Local overrides (checked-in example is tuilab.example.yaml)
+tuilab.local.yaml
+.env
+.agents/
+.claude/
+target/
