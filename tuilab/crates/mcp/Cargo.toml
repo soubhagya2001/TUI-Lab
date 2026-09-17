@@ -12,3 +12,21 @@ path = "src/main.rs"
 
 [lints]
 workspace = true
+
+[dependencies]
+tui-lab-core = { path = "../core" }
+tui-lab-protocol = { path = "../protocol" }
+tui-lab-input = { path = "../input" }
+tui-lab-pty = { path = "../pty" }
+tui-lab-runtime = { path = "../runtime" }
+tui-lab-assertions = { path = "../assertions" }
+tui-lab-snapshots = { path = "../snapshots" }
+rmcp = { version = "3.4", features = ["server", "macros", "schemars", "transport-io"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+regex = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde_yaml = "0.9"

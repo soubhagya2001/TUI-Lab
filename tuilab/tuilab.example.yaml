@@ -1,0 +1,21 @@
+# TUI Lab example project config — copy to `tuilab.yaml` and edit.
+# See docs/07-cli-reference.md §7.2 and docs/08-mcp-server-spec.md §8.4.
+version: "1.0"
+tests_dir: tests/e2e
+snapshots_dir: tests/snapshots
+default_terminal: { width: 120, height: 40 }
+default_timeout: 10s
+parallel: 4
+report:
+  json: reports/results.json
+  junit: reports/junit.xml
+  html: reports/index.html
+env:
+  TERM: xterm-256color
+security:
+  # Regex allowlist for MCP `tui_launch`. The command line
+  # (`command + args`) must match at least one pattern.
+  allow_commands:
+    - "^\\./.*"
+    - "^cargo run.*"
+    - "^python.*"

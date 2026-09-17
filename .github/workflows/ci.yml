@@ -40,3 +40,4 @@ jobs:
       - run: cargo build --offline -p tui-lab-cli
       - run: cargo run --offline --manifest-path tests/fixtures/ratatui-sample/Cargo.toml --no-run
       - run: cargo run --offline -p tui-lab-cli -- run tests/e2e
+      - run: cargo test --offline -p tui-lab-mcp --test stdio_probe

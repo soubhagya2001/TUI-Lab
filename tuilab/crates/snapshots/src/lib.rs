@@ -9,5 +9,5 @@ pub mod utils;
 
 pub use store::{
     apply_masks, cells_from_json, cells_to_json, compare_text, compile_masks, load_text, save_text,
-    CellData, CellSnapshot, CompareOutcome, MASK_REPLACEMENT,
+    text_golden_path, CellData, CellSnapshot, CompareOutcome, MASK_REPLACEMENT,
 };

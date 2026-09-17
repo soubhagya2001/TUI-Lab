@@ -1,16 +1,40 @@
 //! `tuilab-mcp` server: 9 `tui_*` tools over stdio (docs/08).
 //!
-//! Phase 0 scaffold — `rmcp` wiring arrives in Phase 4.
+//! Tracing goes to stderr — stdout belongs to the MCP transport.
 
-mod constants;
-mod utils;
+use std::path::PathBuf;
 
-use constants::{FORBIDDEN_COMMAND, MAX_SESSIONS, SESSION_IDLE_SECS};
+use rmcp::ServiceExt;
+use tui_lab_mcp::handler::TuiLabHandler;
+use tui_lab_mcp::security::load_allowlist;
+#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_ansi(false)
+        .init();
 
-fn main() {
-    println!("tuilab-mcp 0.1.0 (Phase 0 scaffold)");
-    println!(
-        "first session: {} (max {MAX_SESSIONS}, idle {SESSION_IDLE_SECS}s, deny: {FORBIDDEN_COMMAND})",
-        utils::session_id(1)
-    );
+    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let allow = match load_allowlist(&root) {
+        Ok(allow) => allow,
+        Err(e) => {
+            eprintln!("config error: {e}");
+            std::process::exit(2);
+        }
+    };
+    tracing::info!(root = %root.display(), "tuilab-mcp serving over stdio");
+
+    let handler = TuiLabHandler::new(root, allow);
+    match handler.serve(rmcp::transport::stdio()).await {
+        Ok(running) => {
+            if let Err(e) = running.waiting().await {
+                eprintln!("server error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("serve error: {e}");
+            std::process::exit(1);
+        }
+    }
 }

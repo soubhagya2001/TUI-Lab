@@ -1,17 +1,11 @@
-//! MCP helpers.
-
-/// Format a session id from a counter.
-#[must_use]
-pub fn session_id(counter: u64) -> String {
-    format!("sess_{counter:03}")
-}
+//! MCP helpers (shared small utilities for this crate).
+//!
+//! Session ids come from `tui-lab-core` so every frontend agrees.
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn formats_zero_padded_ids() {
-        assert_eq!(session_id(7), "sess_007");
+    fn core_session_ids_are_zero_padded() {
+        assert_eq!(tui_lab_core::utils::session_id(7), "sess_007");
     }
 }

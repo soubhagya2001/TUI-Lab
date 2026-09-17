@@ -7,8 +7,10 @@ pub mod context;
 pub mod error;
 pub mod result;
 pub mod runner;
+pub mod sessions;
 pub mod utils;
 
 pub use context::TestContext;
 pub use result::{FailureInfo, StepResult, SuiteResult, TerminalInfo};
 pub use runner::{run_file, RunOptions};
+pub use sessions::{ClosedSession, LiveSession, NewSession, SessionRegistry};

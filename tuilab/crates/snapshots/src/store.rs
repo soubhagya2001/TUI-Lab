@@ -85,9 +85,14 @@ pub fn apply_masks(text: &str, masks: &[regex::Regex]) -> String {
     out
 }
 
+/// Golden path shared by save and compare (size-scoped `.txt`).
+pub fn text_golden_path(dir: &Path, name: &str, width: u16, height: u16) -> PathBuf {
+    PathBuf::from(snapshot_file(&dir.to_string_lossy(), name, width, height)).with_extension("txt")
+}
+
 /// Write a text golden, creating parent directories.
 pub fn save_text(dir: &Path, name: &str, width: u16, height: u16, text: &str) -> Result<PathBuf> {
-    let path = PathBuf::from(snapshot_file(&dir.to_string_lossy(), name, width, height));
+    let path = text_golden_path(dir, name, width, height);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| SnapshotError::Io(format!("create {}: {e}", parent.display())))?;

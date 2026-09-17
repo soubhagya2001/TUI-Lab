@@ -6,6 +6,11 @@ Expose TUI Lab as MCP tools over stdio so AI agents (Claude / ChatGPT / Cursor /
 MCP Client (agent) -> TUI Lab MCP Server (stdio) -> tui-lab-core -> App PTY
 ```
 
+Implementation (Phase 4): `rmcp` 3.x (`server`, `macros`, `schemars`,
+`transport-io` features), `#[tool_router]` + `#[tool]` methods over a shared
+`SessionRegistry` in `tui-lab-core`. Tracing goes to stderr; stdout belongs
+to the transport. Scope is tools only — no prompts/resources.
+
 ## 8.1 Tool list (9 tools, small + powerful)
 
 | Tool | Input | Returns |
@@ -18,7 +23,19 @@ MCP Client (agent) -> TUI Lab MCP Server (stdio) -> tui-lab-core -> App PTY
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
 | `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
 | `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
-| `tui_close` | `{ session_id }` | `{ exit_code, crashed }` |
+| `tui_close` | `{ session_id }` | `{ success, signal }` |
+
+Phase 4 field notes (deviations from early sketches, kept honest):
+
+*   `tui_close` returns `success` + `signal`: `portable-pty` reports
+    success/signal rather than numeric codes (numeric `exit_code` arrives
+    with a richer process API later).
+*   `tui_screen { styled: true }` is accepted but per-cell detail is deferred
+    to v2; text + cursor + dims always return.
+*   `tui_snapshot` returns `{ saved: true }` when it writes a new golden,
+    `{ saved: false, diff }` when it compares.
+*   Allowlist patterns are regexes: `^\./.*`, `^cargo run.*`, `^python.*`
+    (see `tuilab.example.yaml`).
 
 Example:
 
@@ -70,7 +87,7 @@ Prefer Mode B for regression; Mode A for investigation. Do not make the agent pr
 
 *   One PTY per `session_id`; idle timeout (default 60s) auto-closes orphans.
 *   Max concurrent sessions configurable (default 8); per-cwd sandbox.
-*   **Command allowlist:** `tui_launch` only runs commands matching `security.allow_commands` regex list in `tuilab.yaml` (default: `./*` + `cargo run*` + `python*` under project cwd). Everything else rejected with `FORBIDDEN_COMMAND`.
+*   **Command allowlist:** `tui_launch` only runs command lines matching `security.allow_commands` regex list in `tuilab.yaml` (defaults: `^\./.*`, `^cargo run.*`, `^python.*`). Everything else rejected with `FORBIDDEN_COMMAND`.
 *   **Cwd jail:** `cwd` must resolve under project root; `..` escape rejected.
 *   `tui_close` always kills process tree; no leaked ConPTY/PTY handles.
 *   Never echo secrets: `tui_type` with `sensitive: true` redacts from logs.

@@ -12,6 +12,13 @@ pub fn clamp_timeout_ms(ms: u64) -> u64 {
     }
 }
 
+/// Format a session id from a counter (`sess_001`, …). Shared by every
+/// frontend so ids look the same over CLI, MCP, and future transports.
+#[must_use]
+pub fn session_id(counter: u64) -> String {
+    format!("sess_{counter:03}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24,5 +31,10 @@ mod tests {
     #[test]
     fn nonzero_passes_through() {
         assert_eq!(clamp_timeout_ms(250), 250);
+    }
+
+    #[test]
+    fn session_ids_are_zero_padded() {
+        assert_eq!(session_id(7), "sess_007");
     }
 }

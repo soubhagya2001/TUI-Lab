@@ -106,4 +106,10 @@ it, never a second implementation.
     self-hosted `tests/e2e` dogfood (smoke + search-flow with committed
     golden) green via `tuilab run tests/e2e`, e2e job added to CI.
     Fixed en route: ConPTY children need explicit CWD (`12` §12.2).
-*   **Phase 4 — next.** MCP server (`rmcp`, 9 tools, allowlist + cwd jail).
+*   **Phase 4 — done (Windows-verified).** `tui-lab-core` session registry
+    (cap 8, idle reaper, shared pump), `tuilab-mcp` on `rmcp` 3.x with the 9
+    `tui_*` tools, allowlist + cwd jail enforced, `sensitive` redaction,
+    `tuilab.example.yaml`, stdio handshake probe + Mode A/B tests green.
+    Fixed en route: registry warm-up must feed (not discard) the ConPTY
+    handshake; snapshot golden paths unified via `text_golden_path`.
+*   **Phase 5 — next.** Thin SDKs (Python → JS/TS → Rust sidecars).
