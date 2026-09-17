@@ -4,4 +4,10 @@
 
 pub mod constants;
 pub mod error;
+pub mod store;
 pub mod utils;
+
+pub use store::{
+    apply_masks, cells_from_json, cells_to_json, compare_text, compile_masks, save_text, CellData,
+    CellSnapshot, CompareOutcome, MASK_REPLACEMENT,
+};

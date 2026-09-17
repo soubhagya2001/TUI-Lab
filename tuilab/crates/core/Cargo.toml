@@ -13,3 +13,8 @@ workspace = true
 tui-lab-pty = { path = "../pty" }
 tui-lab-terminal = { path = "../terminal" }
 tui-lab-input = { path = "../input" }
+tui-lab-protocol = { path = "../protocol" }
+tui-lab-runtime = { path = "../runtime" }
+tui-lab-assertions = { path = "../assertions" }
+tui-lab-snapshots = { path = "../snapshots" }
+tokio = { version = "1", features = ["time", "rt", "rt-multi-thread", "macros"] }

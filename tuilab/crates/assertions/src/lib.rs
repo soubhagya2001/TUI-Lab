@@ -2,6 +2,9 @@
 //!
 //! Phase 0 scaffold — taxonomy implementation arrives in Phase 2.
 
+pub mod conditions;
 pub mod constants;
 pub mod error;
 pub mod utils;
+
+pub use conditions::{evaluate, Condition, ScreenView, Verdict};

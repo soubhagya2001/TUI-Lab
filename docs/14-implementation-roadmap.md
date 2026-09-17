@@ -93,4 +93,10 @@ it, never a second implementation.
     `runtime_smoke` (boot → select → resize → search → quit, exit 0) all green
     under `cargo fmt/clippy/test`. Caught + fixed: ConPTY press/release
     double-fire (`12` §12.2).
-*   **Phase 2 — next.** Protocol serde types, supervisor, assertions/snapshots.
+*   **Phase 2 — done (Windows-verified).** `tui-lab-protocol` (9 JSON actions,
+    strict field validation; YAML `tui-lab/v1` steps with aliases), `tui-lab-runtime`
+    (tokio `wait_for_text` + `run_with_timeout`), `tui-lab-assertions` (8-condition
+    taxonomy over `ScreenView`), `tui-lab-snapshots` (goldens, regex masks, unified
+    diff), and a `single_session` YAML end-to-end proof against the fixture.
+    Single-session only; registry, `TestContext`, reporters deferred.
+*   **Phase 3 — next.** CLI (`init/run/report`), JUnit/JSON reports, failure bundle.

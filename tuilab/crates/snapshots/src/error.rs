@@ -5,6 +5,8 @@
 pub enum SnapshotError {
     /// Called before the Phase implementing it lands.
     NotImplemented(&'static str),
+    /// Filesystem failure (save/load golden).
+    Io(String),
     /// Free-form failure with snapshot-name context attached upstream.
     Message(String),
 }
@@ -13,6 +15,7 @@ impl std::fmt::Display for SnapshotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotImplemented(what) => write!(f, "not implemented: {what}"),
+            Self::Io(msg) => write!(f, "snapshot i/o failed: {msg}"),
             Self::Message(msg) => write!(f, "{msg}"),
         }
     }
