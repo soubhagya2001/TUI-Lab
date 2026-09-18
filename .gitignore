@@ -6,6 +6,7 @@
 
 # TUI Lab test artifacts (never commit)
 reports/
+tuilab/*.log
 **/snapshots/*.new
 **/snapshots/*.actual.*
 tuilab/tests/**/*.log
