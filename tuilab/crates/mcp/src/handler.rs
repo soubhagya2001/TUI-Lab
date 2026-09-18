@@ -364,9 +364,11 @@ impl TuiLabHandler {
     }
 
     /// Close a session, reaping the child. Always close what you launch.
+    /// Pass `quit` (e.g. "q") so close polls for natural exit first and only
+    /// kills on timeout — this beats press-quit-then-close races on loaded CI.
     #[tool(
         name = "tui_close",
-        description = "Close a session and reap its process. Always close sessions you launch."
+        description = "Close a session and reap its process, optionally sending quit input first and waiting for natural exit. Always close sessions you launch."
     )]
     pub async fn tui_close(
         &self,
@@ -376,7 +378,10 @@ impl TuiLabHandler {
         let mut state = self.state.lock().await;
         let closed = state
             .registry
-            .remove(&params.session_id)
+            .remove(
+                &params.session_id,
+                params.quit.as_deref().map(str::as_bytes),
+            )
             .map_err(|e| tool_error("close", e))?;
         Ok(Json(CloseOut {
             success: closed.exited_cleanly,

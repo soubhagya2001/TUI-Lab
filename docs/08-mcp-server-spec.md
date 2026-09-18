@@ -23,13 +23,17 @@ to the transport. Scope is tools only — no prompts/resources.
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
 | `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
 | `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
-| `tui_close` | `{ session_id }` | `{ success, signal }` |
+| `tui_close` | `{ session_id, quit? }` | `{ success, signal }` |
+
+Phase 4 field notes (deviations from early sketches, kept honest):
 
 Phase 4 field notes (deviations from early sketches, kept honest):
 
 *   `tui_close` returns `success` + `signal`: `portable-pty` reports
     success/signal rather than numeric codes (numeric `exit_code` arrives
-    with a richer process API later).
+    with a richer process API later). Pass `quit` (e.g. `"q"`) so close
+    polls for natural exit within the grace period and only then kills —
+    this removes the press-quit/close race on slow schedulers.
 *   `tui_screen { styled: true }` is accepted but per-cell detail is deferred
     to v2; text + cursor + dims always return.
 *   `tui_snapshot` returns `{ saved: true }` when it writes a new golden,

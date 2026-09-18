@@ -270,7 +270,9 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             session.emu.resize(width as usize, height as usize);
             serde_json::json!({"ok": true}).to_string()
         }
-        Action::Close { session_id, .. } => match registry.remove(&session_id) {
+        Action::Close {
+            session_id, signal, ..
+        } => match registry.remove(&session_id, signal.as_deref().map(str::as_bytes)) {
             Ok(closed) => serde_json::json!({
                 "ok": true,
                 "success": closed.exited_cleanly,

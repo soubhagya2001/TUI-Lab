@@ -139,15 +139,20 @@ impl SessionRegistry {
         Ok(session)
     }
 
-    /// Bounded close + removal. Unknown ids are an error, not a no-op.
-    pub fn remove(&mut self, id: &str) -> Result<ClosedSession> {
+    /// Bounded close + removal with an optional graceful quit first.
+    ///
+    /// When `quit` is given, its bytes go to the child and `close` polls for
+    /// natural exit within the grace period before falling back to kill.
+    /// This removes the press-quit/close race: quitting and reaping happen in
+    /// one call instead of two racy round-trips. Unknown ids are an error.
+    pub fn remove(&mut self, id: &str, quit: Option<&[u8]>) -> Result<ClosedSession> {
         let mut session = self
             .sessions
             .remove(id)
             .ok_or_else(|| CoreError::Message(format!("unknown session: {id}")))?;
         let status = session
             .pty
-            .close(None, None)
+            .close(quit, None)
             .map_err(|e| CoreError::Pty(e.to_string()))?;
         Ok(ClosedSession {
             exited_cleanly: status.success(),

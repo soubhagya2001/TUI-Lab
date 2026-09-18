@@ -251,6 +251,11 @@ pub struct RunTestOut {
 pub struct CloseParams {
     /// Session id.
     pub session_id: String,
+    /// Optional quit input sent before reaping (e.g. `"q"`). When given,
+    /// close polls for natural exit within the grace period and only then
+    /// kills — removing the press-quit/close race on slow schedulers.
+    #[serde(default)]
+    pub quit: Option<String>,
 }
 
 /// `tui_close` output.

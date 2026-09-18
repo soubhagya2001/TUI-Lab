@@ -197,16 +197,11 @@ fn proto_serves_all_nine_actions() {
         format!(r#"{{"action":"resize","session_id":"{sid}","width":80,"height":24}}"#),
     );
     assert_eq!(resize["ok"], true);
-    let quit = ask(
-        &tx,
-        &rx,
-        format!(r#"{{"action":"press","session_id":"{sid}","key":"q"}}"#),
-    );
-    assert_eq!(quit["ok"], true);
+    // Close with quit input: graceful reap in one call, no press/close race.
     let close = ask(
         &tx,
         &rx,
-        format!(r#"{{"action":"close","session_id":"{sid}"}}"#),
+        format!(r#"{{"action":"close","session_id":"{sid}","signal":"q"}}"#),
     );
     assert_eq!(close["success"], true, "{close}");
 

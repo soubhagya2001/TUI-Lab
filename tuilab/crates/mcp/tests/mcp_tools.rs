@@ -239,17 +239,11 @@ async fn mode_a_loop_against_fixture() {
     assert!(typed.ok);
 
     // Quit from the detail screen, then close must reap a clean exit.
-    handler
-        .tui_press(Parameters(PressParams {
-            session_id: id.clone(),
-            key: "q".to_string(),
-        }))
-        .await
-        .expect("quit");
-
+    // Quit rides inside close (one call, no press/close race).
     let close = handler
         .tui_close(Parameters(CloseParams {
             session_id: id.clone(),
+            quit: Some("q".to_string()),
         }))
         .await
         .expect("close")

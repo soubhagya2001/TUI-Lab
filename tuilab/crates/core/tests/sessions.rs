@@ -36,8 +36,8 @@ fn spawn_returns_sequential_ids() {
     assert_eq!(first, "sess_001");
     assert_eq!(second, "sess_002");
     assert_eq!(registry.len(), 2);
-    registry.remove(&first).expect("remove");
-    registry.remove(&second).expect("remove");
+    registry.remove(&first, None).expect("remove");
+    registry.remove(&second, None).expect("remove");
     assert!(registry.is_empty());
 }
 
@@ -56,13 +56,13 @@ fn cap_is_enforced_without_orphans() {
     assert!(err.to_string().contains("session limit"));
     // The rejected spawn created nothing: still exactly 2 live.
     assert_eq!(registry.len(), 2);
-    registry.remove(&first).expect("remove");
+    registry.remove(&first, None).expect("remove");
     // A freed slot accepts a new session with the next id.
     let third = registry
         .spawn(NewSession::new(shell_spawn()))
         .expect("spawn 3");
     assert_eq!(third, "sess_003");
-    registry.remove(&third).expect("remove");
+    registry.remove(&third, None).expect("remove");
     // One slot is still occupied by the second session; drain it.
     assert_eq!(registry.len(), 1);
     assert_eq!(registry.reap_idle(Duration::ZERO), 1);
@@ -70,11 +70,35 @@ fn cap_is_enforced_without_orphans() {
 }
 
 #[test]
+fn remove_with_quit_reaps_a_clean_exit() {
+    // A shell that understands `exit`, so quit bytes end it gracefully.
+    #[cfg(windows)]
+    let (command, args, quit): (String, Vec<String>, &[u8]) =
+        ("cmd".to_string(), vec!["/Q".to_string()], b"exit\r");
+    #[cfg(not(windows))]
+    let (command, args, quit): (String, Vec<String>, &[u8]) =
+        ("sh".to_string(), Vec::new(), b"exit\n");
+    let mut registry = SessionRegistry::new();
+    let id = registry
+        .spawn(NewSession::new(SpawnOptions {
+            command,
+            args,
+            ..shell_spawn()
+        }))
+        .expect("spawn");
+    let closed = registry.remove(&id, Some(quit)).expect("remove");
+    assert!(
+        closed.exited_cleanly,
+        "quit bytes must win the race vs kill"
+    );
+}
+
+#[test]
 fn unknown_ids_name_themselves() {
     let mut registry = SessionRegistry::new();
     let err = registry.get_mut("sess_404").expect_err("lookup");
     assert!(err.to_string().contains("sess_404"));
-    let err = registry.remove("sess_404").expect_err("remove");
+    let err = registry.remove("sess_404", None).expect_err("remove");
     assert!(err.to_string().contains("sess_404"));
 }
 
@@ -100,5 +124,5 @@ fn fresh_sessions_survive_reaping() {
     let reaped = registry.reap_idle(Duration::from_secs(60));
     assert_eq!(reaped, 0);
     assert!(registry.get_mut(&id).is_ok());
-    registry.remove(&id).expect("remove");
+    registry.remove(&id, None).expect("remove");
 }
