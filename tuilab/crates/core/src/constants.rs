@@ -1,7 +1,10 @@
 //! Session and lifecycle defaults (docs/02 §2.4, docs/08 §8.4).
 
 /// Default per-wait timeout.
-pub const DEFAULT_TIMEOUT_MS: u64 = 5_000;
+///
+/// Generous on purpose: waits return on first match, so this only costs time
+/// on genuine timeouts — while tight defaults flake on loaded CI runners.
+pub const DEFAULT_TIMEOUT_MS: u64 = 10_000;
 /// Screen poll interval for `wait_for_text`.
 pub const DEFAULT_POLL_MS: u64 = 50;
 /// Maximum concurrent PTY sessions (MCP + CLI runners share the budget).

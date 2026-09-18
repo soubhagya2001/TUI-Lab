@@ -277,6 +277,7 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 "ok": true,
                 "success": closed.exited_cleanly,
                 "signal": closed.signal,
+                "detail": closed.note,
             })
             .to_string(),
             Err(e) => error_response(&e.to_string()),

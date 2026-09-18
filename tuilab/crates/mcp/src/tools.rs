@@ -268,4 +268,6 @@ pub struct CloseOut {
     pub success: bool,
     /// Termination signal, if reported.
     pub signal: Option<String>,
+    /// Kill-path evidence (pump counters), if the grace expired first.
+    pub detail: Option<String>,
 }

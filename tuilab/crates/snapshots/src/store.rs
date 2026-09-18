@@ -111,9 +111,14 @@ pub fn load_text(path: &Path) -> Result<String> {
 }
 
 /// Compare live text against a golden with masks applied to both sides.
+///
+/// Line endings normalize (`\r\n` → `\n`) so goldens compare byte-identical
+/// regardless of checkout `core.autocrlf` settings (see `.gitattributes`).
 pub fn compare_text(expected: &str, actual: &str, masks: &[regex::Regex]) -> CompareOutcome {
-    let masked_expected = apply_masks(expected, masks);
-    let masked_actual = apply_masks(actual, masks);
+    let expected = expected.replace("\r\n", "\n");
+    let actual = actual.replace("\r\n", "\n");
+    let masked_expected = apply_masks(&expected, masks);
+    let masked_actual = apply_masks(&actual, masks);
     let equal = masked_expected == masked_actual;
     CompareOutcome {
         equal,

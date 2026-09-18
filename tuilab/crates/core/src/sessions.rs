@@ -34,6 +34,10 @@ pub struct ClosedSession {
     pub exited_cleanly: bool,
     /// Termination signal name, if reported.
     pub signal: Option<String>,
+    /// Kill-path evidence: pump counters when the grace expired first.
+    /// `None` on natural exits. Exists so the next Hangup-style mystery
+    /// arrives with data (bytes flowing vs pump dead) instead of theories.
+    pub note: Option<String>,
 }
 
 impl std::fmt::Debug for LiveSession {
@@ -50,6 +54,7 @@ impl std::fmt::Debug for ClosedSession {
         f.debug_struct("ClosedSession")
             .field("exited_cleanly", &self.exited_cleanly)
             .field("signal", &self.signal)
+            .field("note", &self.note)
             .finish()
     }
 }
@@ -154,9 +159,20 @@ impl SessionRegistry {
             .pty
             .close(quit, None)
             .map_err(|e| CoreError::Pty(e.to_string()))?;
+        let (bytes, errors) = session.pty.pump_stats();
+        let exited_cleanly = status.success();
+        let signal = status.signal().map(str::to_string);
+        let note = if !exited_cleanly && signal.is_some() {
+            Some(format!(
+                "killed after grace expired; pump delivered {bytes} bytes with {errors} read errors"
+            ))
+        } else {
+            None
+        };
         Ok(ClosedSession {
-            exited_cleanly: status.success(),
-            signal: status.signal().map(str::to_string),
+            exited_cleanly,
+            signal,
+            note,
         })
     }
 

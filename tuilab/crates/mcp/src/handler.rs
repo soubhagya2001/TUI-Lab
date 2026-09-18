@@ -386,6 +386,7 @@ impl TuiLabHandler {
         Ok(Json(CloseOut {
             success: closed.exited_cleanly,
             signal: closed.signal,
+            detail: closed.note,
         }))
     }
 }

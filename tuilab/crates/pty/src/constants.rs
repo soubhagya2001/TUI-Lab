@@ -9,4 +9,7 @@ pub const DEFAULT_HEIGHT: u16 = 40;
 /// Minimum supported Windows 10 release for ConPTY.
 pub const MIN_WINDOWS_BUILD: u32 = 17_109;
 /// Default grace period before SIGKILL / TerminateProcess in `close`.
-pub const KILL_GRACE_DEFAULT_MS: u64 = 2_000;
+///
+/// Generous on purpose: the grace only elapses on the kill path, so slow
+/// schedulers (loaded CI) get room while cooperative closes return at once.
+pub const KILL_GRACE_DEFAULT_MS: u64 = 10_000;

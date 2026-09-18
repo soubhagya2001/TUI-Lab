@@ -102,6 +102,8 @@ Also support: `ignore_ansi_style: true`, per-cell `ignore_fg/bg`, custom normali
 
 ## 6.4 Timing / retry semantics
 
-*   Every `wait_*` / `expect_*`: `{ timeout = 2-5s default, poll_ms = 25-50 }`.
+*   Every `wait_*` / `expect_*`: `{ timeout = 10s default, poll_ms = 25-50 }`.
+    Timeouts return on first match, so the default only costs time on genuine
+    failures; tight defaults flaked on loaded CI (Phase 6).
 *   Anti-pattern: `press ENTER` → immediate `assert`. Correct: `press ENTER` → `wait_for_text`.
 *   On timeout: return last screen + elapsed + step index (feeds failure bundle in `11`).
