@@ -14,13 +14,13 @@ tuilab/tests/**/*.log
 # Recorder output drafts
 /recordings/*.draft.yaml
 
-# SDK build artifacts
-sdks/python/dist/
-sdks/python/*.egg-info/
-sdks/python/uv.lock
-sdks/python/tests/snapshots/
-sdks/javascript/dist/
-sdks/javascript/node_modules/
+# SDK build artifacts (paths relative to repo root)
+tuilab/sdks/python/dist/
+tuilab/sdks/python/*.egg-info/
+tuilab/sdks/python/uv.lock
+tuilab/sdks/python/tests/snapshots/
+tuilab/sdks/javascript/dist/
+tuilab/sdks/javascript/node_modules/
 .venv/
 .pytest_cache/
 __pycache__/
