@@ -4,7 +4,7 @@ schema: tui-lab/v1
 name: smoke
 application:
   command: "cargo"
-  args: ["run", "--offline", "--manifest-path", "tests/fixtures/ratatui-sample/Cargo.toml"]
+  args: ["run", "--manifest-path", "tests/fixtures/ratatui-sample/Cargo.toml"]
 terminal:
   width: 120
   height: 40

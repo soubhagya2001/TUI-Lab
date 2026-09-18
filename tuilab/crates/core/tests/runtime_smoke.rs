@@ -20,7 +20,6 @@ fn fixture_bin() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/ratatui-sample");
     let output = Command::new("cargo")
         .arg("build")
-        .arg("--offline")
         .current_dir(&dir)
         .output()
         .expect("run cargo build for fixture");

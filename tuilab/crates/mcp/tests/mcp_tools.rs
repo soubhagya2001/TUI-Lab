@@ -32,11 +32,14 @@ fn fixture_bin() -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/ratatui-sample");
     let output = Command::new("cargo")
         .arg("build")
-        .arg("--offline")
         .current_dir(&dir)
         .output()
         .expect("run cargo build for fixture");
-    assert!(output.status.success(), "fixture build failed");
+    assert!(
+        output.status.success(),
+        "fixture build failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let bin = if cfg!(windows) {
         "ratatui-sample.exe"
     } else {

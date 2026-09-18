@@ -16,7 +16,7 @@ EXE = "ratatui-sample.exe" if os.name == "nt" else "ratatui-sample"
 
 def fixture_bin() -> str:
     subprocess.run(
-        ["cargo", "build", "--offline"],
+        ["cargo", "build"],
         cwd=FIXTURE_DIR,
         check=True,
         capture_output=True,

@@ -26,34 +26,49 @@ MSRV: stable Rust ≥ 1.75. Targets: `x86_64-pc-windows-msvc`, `x86_64-unknown-l
 ## 14.2 Repository layout
 
 ```
-tuilab/
-  crates/
-    core/          # TestContext, orchestrator, lifecycle
-    protocol/      # JSON protocol types, schema, versioning
-    runtime/       # supervisor (timeouts/retries/parallel)
-    pty/           # portable-pty wrapper (Unix + ConPTY)
-    terminal/      # vte parser + grid buffer + snapshots
-    input/         # keyboard/mouse encoding
-    assertions/    # text/screen/process/interaction/perf
-    snapshots/     # golden store + diff + masking
-    reporter/      # JSON / JUnit / HTML
-    cli/           # `tuilab` (clap): init/run/record/report
-    mcp/           # `tuilab-mcp` (rmcp stdio, 9 tools)
-  schemas/
-    test-schema-v1.json
-  docs/            # this folder (docs-only phase)
+TUI-Lab/                        # repo root
+  docs/                         # design source of truth (this file is 14/14)
+  tuilab/                       # Rust workspace (members = crates/*)
+    crates/
+      core/          # TestContext, runner, SessionRegistry, results
+      protocol/      # JSON actions, YAML steps, schema, versioning
+      runtime/       # wait_for_text, supervisor (timeouts/retries)
+      pty/           # portable-pty wrapper (Unix + ConPTY), PtySession
+      terminal/      # alacritty_terminal adapter, Emulator, DSR forwarding
+      input/         # keyboard encoding (mouse deferred to v2)
+      assertions/    # text/screen/process taxonomy + condition_from_json
+      snapshots/     # golden store + diff + regex masking
+      reporter/      # JSON / JUnit re-render (HTML deferred to v2)
+      cli/           # `tuilab` (clap): init/run/report/record-stub/proto
+      mcp/           # `tuilab-mcp` (rmcp stdio, 9 tools)
+    schemas/
+      test-schema-v1.json
+    sdks/
+      python/        # `tui-lab` pip package (sidecar over `tuilab proto`)
+    tests/e2e/<suite>.yaml      # self-hosted dogfood suites
+    tests/fixtures/ratatui-sample/  # minimal TUI fixture (menu+search+quit)
+    tests/snapshots/            # committed goldens
+    tuilab.example.yaml         # documented starting config
+  .github/workflows/ci.yml      # rust / e2e / sdk-python jobs × Win+Linux
 ```
 
-Future: `sdks/{python,javascript,rust}/`, `examples/{python-textual,rust-ratatui,go-bubbletea,bash-tui}/`.
+Still future: `sdks/{javascript,rust}/`, `examples/{python-textual,go-bubbletea,bash-tui}/`.
 
-## 14.3 Phased plan
+## 14.3 Phased plan (Phases 0–5 done, Windows-verified; see §14.6)
 
-*   **Phase 1 — Universal Runtime:** PTY launch, emulator, keyboard, screen capture, resize, exit handling. No MCP.
-*   **Phase 2 — Test Protocol:** Freeze 9 actions (`launch/press/type/wait/screen/assert/snapshot/resize/close`). Stabilize.
-*   **Phase 3 — CLI:** `tuilab run test.yaml` validates platform end-to-end.
-*   **Phase 4 — MCP:** Same protocol as `tui_*` tools (Modes A+B).
-*   **Phase 5 — SDKs:** Python → JS/TS → Rust thin wrappers.
-*   **Phase 6 — Instrumentation:** Optional element/focus tree adapters (Ratatui/Bubble Tea/Textual). Never required.
+*   **Phase 0 — Scaffold + spike:** 11-crate workspace, dual-OS CI skeleton, PTY spike PASS (deleted).
+*   **Phase 1 — Universal Runtime:** PTY launch, grid emulator, keyboard, screen capture, resize, exit handling + Ratatui fixture + `runtime_smoke`.
+*   **Phase 2 — Test Protocol:** Frozen 9 actions, YAML `tui-lab/v1` steps, tokio waits/supervisor, assertion taxonomy, snapshot goldens + `single_session` proof.
+*   **Phase 3 — CLI:** `tuilab init/run/report` (+ `record` stub), JSON + JUnit reports, failure bundle core, `tests/e2e` dogfood.
+*   **Phase 4 — MCP:** `tui-lab-core` session registry + `tuilab-mcp` on `rmcp` 3.x with 9 `tui_*` tools (Modes A+B), allowlist + cwd jail.
+*   **Phase 5 — SDKs (Python slice):** `tuilab proto` JSON-lines mode + wire-contract test, shared JSON→Condition mapper, Python `tui-lab` SDK + pytest suite, CI `sdk-python` job.
+*   **Phase 6 — Verification closure:** push + first green dual-OS CI; triage Ubuntu legs; check §14.5 boxes for real; no remote exists yet.
+*   **Phase 7 — v2a Recorder:** `tuilab record` with smart `wait_for_text` synthesis (never `sleep`); recorded YAML replayed green; methodology vs `playwright-testing` skill.
+*   **Phase 8 — v2b Parallel fan-out:** `JoinSet` runner + `--parallel N` within the registry cap of 8; per-suite isolation; combined reports; deterministic ordering.
+*   **Phase 9 — v2c Reports + input + deferred mechanics:** HTML reports, mouse input, `--step` runner, `region:` snapshot masks, separate child-`stderr` pipe, numeric exit codes, per-cell `styled` screens — in that order.
+*   **Phase 10 — SDK fast-follows:** JS/TS (`@tui-lab/sdk`) then Rust (`tui-lab-sdk`), same sidecar contract, mirrored fixture flows + CI jobs; no native bindings.
+*   **Phase 11 — Instrumentation (gated):** optional element/focus-tree adapters (Ratatui first). Requires a grill round first. Black-box path always stays.
+*   **Phase 12 — Release hardening + v3 scouting:** `cargo-dist` packaging, stale scaffold comments swept, dead `NotImplemented` variants evaluated, versioning/release process decided. v3 (studio, AI, remote agents) stays tracked in §14.4, not planned in detail.
 
 ## 14.4 MVP scope
 
@@ -62,7 +77,11 @@ Future: `sdks/{python,javascript,rust}/`, `examples/{python-textual,rust-ratatui
 text asserts, `wait_for_text`, snapshots, YAML, CLI runner, JSON report, exit code,
 grid-crate-backed ANSI handling. `tuilab run test.yaml`.
 
-**v2:** resize matrix, mouse, region asserts, snapshot diff, HTML reports, recorder, CI integration, parallel execution.
+**v2 (split into shippable slices — Phases 7–9):**
+v2a recorder → v2b parallel fan-out → v2c HTML reports, mouse, `--step`,
+`region:` masks, separate `stderr` pipe, numeric exit codes, per-cell screens.
+Already landed ahead of schedule: snapshot diff, region asserts (engine),
+CI integration, resize handling (full 4-size matrix still open).
 
 **v3:** web dashboard/studio (Tauri+React), test management, AI generation/failure analysis, remote agents, cross-platform matrix, plugins, visual terminal diff.
 
@@ -74,13 +93,16 @@ engine (Tauri + React frontend, `xterm.js`-style rendering, HTML/SQLite
 reports). CLI-first until the engine is stable; the studio is a viewer over
 it, never a second implementation.
 
-## 14.5 Acceptance criteria (docs phase → build phase)
+## 14.5 Acceptance criteria (updated as phases land)
 
-*   [ ] `cargo new` workspace per `14.2` builds on Win + Linux
-*   [ ] `tuilab run` executes `05` full example against a sample Ratatui + Textual app
-*   [ ] `tui_launch/press/screen/wait/assert/close` work via MCP stdio against same apps
-*   [ ] Snapshot round-trip + mask test passes; resize matrix 4 sizes green
-*   [ ] JUnit output consumed by GitHub Actions with failure bundle from `11`
+*   [x] Workspace per `14.2` builds on Windows (`cargo fmt/clippy/test` green)
+*   [ ] Workspace builds + tests green on Linux (dual-OS CI defined, never run — no remote yet; see Phase 6)
+*   [x] `tuilab run` executes YAML suites against the sample Ratatui app (dogfood `tests/e2e` green)
+*   [ ] Same coverage against a second framework app (Textual placeholder in `05` still open)
+*   [x] `tui_launch/press/screen/wait/assert/close` work via MCP stdio (Mode A/B tests + handshake probe green on Windows)
+*   [x] Snapshot round-trip + regex-mask tests pass; golden diff on mismatch
+*   [ ] Resize matrix 4 sizes green (only 120x40 + 80x24 exercised so far)
+*   [x] JUnit output renders from stored JSON (consumption by GitHub Actions pending first push)
 
 ## 14.6 Phase status (updated as phases land)
 
@@ -117,5 +139,6 @@ it, never a second implementation.
     deduplicated onto it), Python `tui-lab` SDK (`TuiTest` async API +
     `Runner.run`, 5 pytest green), `docs/09` fast-follow checklists for
     JS/TS + Rust, CI `sdk-python` job.
-*   **Phase 6 — next.** Hardening + v2 (recorder, parallel fan-out, HTML
-    reports, mouse, region asserts) and optional instrumentation adapters.
+*   **Phase 6 — next.** Verification closure: push, first green dual-OS CI,
+    Ubuntu triage, §14.5 boxes checked for real. Nothing above may claim
+    Linux support until then.
