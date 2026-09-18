@@ -11,3 +11,4 @@ workspace = true
 
 [dependencies]
 portable-pty = "0.9"
+tracing = "0.1"

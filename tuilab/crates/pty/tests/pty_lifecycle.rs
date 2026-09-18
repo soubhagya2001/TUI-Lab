@@ -76,6 +76,11 @@ fn echo_round_trip_then_bounded_close() {
     // The marker must come back through the PTY output pump.
     assert!(String::from_utf8_lossy(&out).contains("PTY_ALIVE_789"));
 
+    // The pump delivered bytes with a clean read record.
+    let (bytes, errors) = sess.pump_stats();
+    assert!(bytes > 0, "pump delivered output");
+    assert_eq!(errors, 0, "no read errors during round-trip");
+
     // Resize must not kill the session: a second round-trip still works.
     sess.resize(80, 24).expect("resize PTY");
     sess.write_all(&probe).expect("write after resize");

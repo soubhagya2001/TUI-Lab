@@ -1293,6 +1293,7 @@ name = "tui-lab-pty"
 version = "0.1.0"
 dependencies = [
  "portable-pty",
+ "tracing",
 ]
 
 [[package]]

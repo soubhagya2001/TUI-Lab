@@ -54,6 +54,26 @@ pub struct PtySession {
     master: Box<dyn MasterPty>,
     output_rx: mpsc::Receiver<Vec<u8>>,
     writer: SharedWriter,
+    stats: Arc<PumpStats>,
+}
+
+/// Reader-thread counters. A silent pump (bytes flowing nowhere, errors
+/// climbing) is otherwise indistinguishable from a quiet child — this makes
+/// the difference observable (Ubuntu SIGHUP investigation).
+pub struct PumpStats {
+    /// Total payload bytes delivered to the channel.
+    pub bytes: std::sync::atomic::AtomicU64,
+    /// Read errors seen (including retried interrupts).
+    pub read_errors: std::sync::atomic::AtomicU64,
+}
+
+impl PumpStats {
+    fn new() -> Self {
+        Self {
+            bytes: std::sync::atomic::AtomicU64::new(0),
+            read_errors: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
 }
 
 /// Shareable handle to the PTY master writer.
@@ -114,17 +134,31 @@ impl PtySession {
             .try_clone_reader()
             .map_err(|e| PtyError::Spawn(e.to_string()))?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        let stats = Arc::new(PumpStats::new());
+        let pump_stats = Arc::clone(&stats);
         std::thread::spawn(move || {
+            use std::sync::atomic::Ordering;
             let mut chunk = [0u8; 4096];
             loop {
                 match reader.read(&mut chunk) {
                     Ok(0) => break,
                     Ok(n) => {
+                        pump_stats.bytes.fetch_add(n as u64, Ordering::Relaxed);
                         if tx.send(chunk[..n].to_vec()).is_err() {
                             break;
                         }
                     }
-                    Err(_) => break,
+                    // Interrupted reads must be retried: dropping out here
+                    // starves the grid while the child stays alive, which
+                    // surfaces later as a mysterious hang or kill.
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                        pump_stats.read_errors.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        pump_stats.read_errors.fetch_add(1, Ordering::Relaxed);
+                        tracing::debug!(error = %e, "pty reader exiting");
+                        break;
+                    }
                 }
             }
         });
@@ -139,7 +173,17 @@ impl PtySession {
             master: pair.master,
             output_rx: rx,
             writer,
+            stats,
         })
+    }
+
+    /// Reader counters: `(bytes_delivered, read_errors)`.
+    pub fn pump_stats(&self) -> (u64, u64) {
+        use std::sync::atomic::Ordering;
+        (
+            self.stats.bytes.load(Ordering::Relaxed),
+            self.stats.read_errors.load(Ordering::Relaxed),
+        )
     }
 
     /// Cloneable writer handle for wiring into `tui-lab-terminal`.

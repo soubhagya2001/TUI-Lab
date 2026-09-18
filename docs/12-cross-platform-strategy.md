@@ -32,6 +32,10 @@ TUI Lab App
     unset `cwd` to the current process directory.
 *   Child `stderr` shares the PTY stream by default (portable-pty inherits
     stdio); a separate stderr pipe for clean failure bundles is v2 work.
+*   Kill semantics differ: `portable-pty` 0.9 `kill()` sends SIGHUP first on
+    Unix (escalating to SIGKILL), versus TerminateProcess on Windows. A
+    kill-path `close()` therefore reports signal `Hangup`, not `SIGKILL` —
+    tests must accept that shape (seen in Ubuntu CI, Phase 6).
 *   Key press AND release records: ConPTY delivers both, so apps (and the
     Phase 1 fixture) must filter on press events or every key acts twice —
     caught by the `runtime_smoke` test in Phase 1.
