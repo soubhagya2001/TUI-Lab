@@ -66,6 +66,10 @@ steps:
   - resize:
       width: 80
       height: 24
+  # Settle the async redraw before ESC (docs/04); an immediate ESC after
+  # resize races the redraw on Linux and is lost, leaving the app in Detail.
+  - wait_for_text:
+      text: "Selected: beta-chair"
   - press: ESC
   - wait_for_text:
       text: "TUI-LAB-SAMPLE"
@@ -83,6 +87,11 @@ steps:
       name: "proof"
 cleanup:
   - press: ESC
+  # Settle lone-ESC before close(q): crossterm resolves bare ESC with a short
+  # timeout, so an immediate `q` can coalesce into Alt+q (ignored) on Linux.
+  # Sync via wait_for_text, never sleep.
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
 assertions:
   - exit_code: 0
 "#
