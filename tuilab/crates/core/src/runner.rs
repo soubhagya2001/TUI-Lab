@@ -21,7 +21,7 @@ use crate::error::{CoreError, Result};
 use crate::result::{FailureInfo, StepResult, SuiteResult, TerminalInfo};
 
 /// Runner tuning (overridable by future CLI flags).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RunOptions {
     /// Default `wait_for_text` timeout.
     pub wait_default: Duration,
@@ -33,6 +33,27 @@ pub struct RunOptions {
     pub snapshot_dir: PathBuf,
     /// `$TERM` advertised (recorded in results).
     pub term: String,
+    /// Step hook: called after every executed step (main and cleanup).
+    /// Return false to abort remaining main steps (cleanup still runs).
+    /// Core never reads terminals — blocking/interactive behavior belongs
+    /// to the hook implementation (e.g. the CLI `--step` pause).
+    pub step_hook: Option<StepHook>,
+}
+
+/// Per-step callback; false aborts the remaining main steps.
+pub type StepHook = std::sync::Arc<dyn Fn(&StepResult) -> bool + Send + Sync>;
+
+impl std::fmt::Debug for RunOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RunOptions")
+            .field("wait_default", &self.wait_default)
+            .field("poll", &self.poll)
+            .field("close_grace", &self.close_grace)
+            .field("snapshot_dir", &self.snapshot_dir)
+            .field("term", &self.term)
+            .field("step_hook", &self.step_hook.is_some())
+            .finish()
+    }
 }
 
 impl Default for RunOptions {
@@ -43,7 +64,16 @@ impl Default for RunOptions {
             close_grace: None,
             snapshot_dir: PathBuf::from("tests/snapshots"),
             term: tui_lab_pty::utils::term_for(None).to_string(),
+            step_hook: None,
         }
+    }
+}
+
+/// Consult the step hook after a pushed result; false aborts the loop.
+fn poll_hook(opts: &RunOptions, results: &[StepResult]) -> bool {
+    match &opts.step_hook {
+        Some(hook) => hook(&results[results.len() - 1]),
+        None => true,
     }
 }
 
@@ -87,9 +117,10 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
     );
 
     let all_phases = [&file.setup[..], &file.steps[..]];
+    let mut aborted = false;
     for steps in all_phases {
         for step in steps {
-            if failure.is_some() {
+            if failure.is_some() || aborted {
                 break;
             }
             ctx.step_index = results.len();
@@ -122,6 +153,12 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                     input_history: ctx.input_history.clone(),
                 });
             }
+            if !poll_hook(opts, &results) {
+                aborted = true;
+            }
+        }
+        if aborted {
+            break;
         }
     }
 
@@ -146,6 +183,9 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
             detail: outcome.detail,
             duration_ms: step_started.elapsed().as_millis() as u64,
         });
+        if !poll_hook(opts, &results) {
+            break;
+        }
     }
 
     let status = pty

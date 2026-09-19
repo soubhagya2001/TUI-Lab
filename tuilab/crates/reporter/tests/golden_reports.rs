@@ -2,7 +2,7 @@
 
 use tui_lab_core::{FailureInfo, StepResult, SuiteResult, TerminalInfo};
 use tui_lab_reporter::{
-    load_json, load_json_all, to_json, to_junit, to_junit_all, write_json, write_json_all,
+    load_json, load_json_all, to_html, to_json, to_junit, to_junit_all, write_json, write_json_all,
 };
 
 fn fixture_result() -> SuiteResult {
@@ -113,4 +113,24 @@ fn junit_passing_suite_has_no_failures() {
     let xml = to_junit(&result);
     assert!(xml.contains("failures=\"0\""));
     assert!(!xml.contains("<failure"));
+}
+
+#[test]
+fn html_renders_offline_report_with_escapes() {
+    let html = to_html(&[fixture_result()]);
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("smoke &amp; &lt;mirrors&gt;"));
+    assert!(html.contains("FAIL"));
+    assert!(html.contains("<pre>"));
+    assert!(!html.contains("http"), "no external assets");
+}
+
+#[test]
+fn html_passing_suite_marks_pass() {
+    let mut result = fixture_result();
+    result.passed = true;
+    result.failure = None;
+    let html = to_html(&[result]);
+    assert!(html.contains("PASS"));
+    assert!(!html.contains("<pre>"));
 }

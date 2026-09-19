@@ -62,10 +62,10 @@ Still future: `sdks/{javascript,rust}/`, `examples/{python-textual,go-bubbletea,
 *   **Phase 3 — CLI:** `tuilab init/run/report` (+ `record` stub), JSON + JUnit reports, failure bundle core, `tests/e2e` dogfood.
 *   **Phase 4 — MCP:** `tui-lab-core` session registry + `tuilab-mcp` on `rmcp` 3.x with 9 `tui_*` tools (Modes A+B), allowlist + cwd jail.
 *   **Phase 5 — SDKs (Python slice):** `tuilab proto` JSON-lines mode + wire-contract test, shared JSON→Condition mapper, Python `tui-lab` SDK + pytest suite, CI `sdk-python` job.
-*   **Phase 6 — Verification closure:** push + first green dual-OS CI; triage Ubuntu legs; check §14.5 boxes for real; no remote exists yet.
+*   **Phase 6 — Verification closure:** pushed, dual-OS CI green, Ubuntu legs triaged (input-race class recorded in `12` §12.5).
 *   **Phase 7 — v2a Recorder:** `tuilab record` with smart `wait_for_text` synthesis (never `sleep`); recorded YAML replayed green; methodology vs `playwright-testing` skill.
 *   **Phase 8 — v2b Parallel fan-out:** `JoinSet` runner + `--parallel N` within the registry cap of 8; per-suite isolation; combined reports; deterministic ordering.
-*   **Phase 9 — v2c Reports + input + deferred mechanics:** HTML reports, mouse input, `--step` runner, `region:` snapshot masks, separate child-`stderr` pipe, numeric exit codes, per-cell `styled` screens — in that order.
+*   **Phase 9 — v2c in slices:** 9a HTML reports + `--step` runner (done) → 9b mouse input, full loop → 9c `region:` masks, separate `stderr`, numeric exit codes, per-cell `styled` screens.
 *   **Phase 10 — SDK fast-follows:** JS/TS (`@tui-lab/sdk`) then Rust (`tui-lab-sdk`), same sidecar contract, mirrored fixture flows + CI jobs; no native bindings.
 *   **Phase 11 — Instrumentation (gated):** optional element/focus-tree adapters (Ratatui first). Requires a grill round first. Black-box path always stays.
 *   **Phase 12 — Release hardening + v3 scouting:** `cargo-dist` packaging, stale scaffold comments swept, dead `NotImplemented` variants evaluated, versioning/release process decided. v3 (studio, AI, remote agents) stays tracked in §14.4, not planned in detail.
@@ -158,6 +158,7 @@ it, never a second implementation.
     semantics with infra errors as failed results), `tuilab run --parallel`
     (default from `tuilab.yaml`, sequential path untouched), overlap + order
     + containment tests, `--parallel 2` added to the CI e2e job.
-*   **Phase 9 — next.** v2c Reports + input + deferred mechanics (HTML,
-    mouse, `--step`, `region:` masks, separate `stderr`, numeric exit
-    codes, per-cell screens).
+*   **Phase 9a — done (Windows-verified).** Self-contained HTML reports
+    (`report --format html`, offline-capable) and the `--step` runner
+    (per-step hook in core, CLI pause with Enter/q, sequential forcing,
+    headless-safe on closed stdin).

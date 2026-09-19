@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use tui_lab_core::{run_file, RunOptions};
+use tui_lab_core::{StepHook, run_file, RunOptions};
 use tui_lab_protocol::TestFile;
 
 /// Build the fixture binary on demand; return its path.
@@ -121,4 +121,43 @@ steps:
     // exit assertion says so — with none, steps passing is enough.
     assert!(result.steps.iter().all(|step| step.passed));
     assert_eq!(result.exit_success, Some(false));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn step_hook_aborts_early_but_cleanup_runs() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let file = TestFile::from_yaml(&format!(
+        r#"schema: tui-lab/v1
+name: hook-abort
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: DOWN
+  - press: ENTER
+  - press: q
+cleanup:
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let probe = Arc::clone(&calls);
+    let hook: StepHook = Arc::new(move |_| {
+        // Abort from the second call on: two main steps land, then cleanup
+        // runs its single step and stops as well.
+        probe.fetch_add(1, Ordering::SeqCst) < 1
+    });
+    let opts = RunOptions {
+        step_hook: Some(hook),
+        ..RunOptions::default()
+    };
+    let result = run_file(&file, &opts).await.expect("run completes");
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(result.steps.len(), 3);
+    assert!(result.steps[2].kind.starts_with("cleanup:"));
 }

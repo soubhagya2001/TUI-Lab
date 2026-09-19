@@ -22,7 +22,7 @@ reports stay diffable run-over-run.
 
 *   `reports/results.json` — full step trace, timings, screens.
 *   `reports/junit.xml` — CI-native pass/fail.
-*   `reports/index.html` (v2) — step timeline with screen thumbnails, diff view.
+*   `reports/index.html` — self-contained step timeline with screens and diffs (inline CSS, no external assets).
 
 ## 11.3 Failure bundle (capture on every failure)
 

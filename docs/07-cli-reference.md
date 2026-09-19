@@ -23,13 +23,15 @@ tuilab run tests/ --parallel 4
 tuilab record --command "./codegraph" --out tests/codegen.yaml
 # end with Ctrl+\ or stdin EOF; quit the app first (see docs/10)
 
-# Re-render stored results as JUnit
+# Re-render stored results (JUnit or self-contained HTML)
 tuilab report --format junit --out results.xml
-# (--format html arrives in v2)
+tuilab report --format html --out index.html
 
 # Debug a failed run (full failure bundle: screens, history, diffs)
 tuilab run tests/search.yaml --debug
-# (--step arrives with the interactive runner in v2)
+
+# Step through a run interactively (Enter continues, q aborts; forces sequential)
+tuilab run tests/search.yaml --step
 
 # JSON-lines engine mode for SDK sidecars (docs/09) — one action in, one reply out
 tuilab proto

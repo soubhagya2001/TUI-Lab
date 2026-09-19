@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use tui_lab_core::{run_file, RunOptions, SuiteResult};
 use tui_lab_protocol::TestFile;
-use tui_lab_reporter::{load_json_all, to_junit_all, write_json_all};
+use tui_lab_reporter::{load_json_all, write_json_all};
 
 use crate::config::{load, ProjectConfig};
 use crate::constants::{
@@ -108,8 +108,7 @@ pub async fn run(
     parallel: Option<usize>,
 ) -> i32 {
     if step_mode {
-        eprintln!("--step arrives with the interactive runner (v2); run without it for now");
-        return EXIT_CONFIG_ERROR;
+        eprintln!("step mode: Enter continues each step, q aborts the run");
     }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config = match load(&cwd) {
@@ -137,12 +136,17 @@ pub async fn run(
 
     let mut results = Vec::new();
     let mut exit = EXIT_OK;
-    let slots = parallel
+    let mut slots = parallel
         .unwrap_or(config.parallel)
         .clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
+    if step_mode && slots != 1 {
+        // Pausing across parallel tasks on shared stdin is incoherent.
+        eprintln!("--step implies sequential runs (slots forced to 1)");
+        slots = 1;
+    }
     if slots == 1 {
         for suite_path in &suites {
-            let (file, opts) = match load_suite(suite_path, &config, terminal_override) {
+            let (file, opts) = match load_suite(suite_path, &config, terminal_override, step_mode) {
                 Ok(loaded) => loaded,
                 Err(code) => return code,
             };
@@ -177,13 +181,14 @@ pub async fn run(
         // (infra errors arrive as failed results, never aborts).
         let mut files = Vec::with_capacity(suites.len());
         for suite_path in &suites {
-            match load_suite(suite_path, &config, terminal_override) {
+            match load_suite(suite_path, &config, terminal_override, step_mode) {
                 Ok((file, _)) => files.push(file),
                 Err(code) => return code,
             }
         }
         let opts = RunOptions {
             snapshot_dir: PathBuf::from(&config.snapshots_dir),
+            step_hook: step_mode.then(step_pause_hook),
             ..RunOptions::default()
         };
         for result in tui_lab_core::run_suites(files, &opts, slots).await {
@@ -213,6 +218,7 @@ fn load_suite(
     suite_path: &Path,
     config: &crate::config::ProjectConfig,
     terminal_override: Option<(u16, u16)>,
+    step_mode: bool,
 ) -> Result<(TestFile, RunOptions), i32> {
     let text = std::fs::read_to_string(suite_path).map_err(|e| {
         eprintln!("read {}: {e}", suite_path.display());
@@ -229,9 +235,27 @@ fn load_suite(
     }
     let opts = RunOptions {
         snapshot_dir: PathBuf::from(&config.snapshots_dir),
+        step_hook: step_mode.then(step_pause_hook),
         ..RunOptions::default()
     };
     Ok((file, opts))
+}
+
+/// Pause hook for `--step`: Enter continues, q aborts. Closed stdin
+/// (pipes, CI) reads EOF at once, so headless runs never hang here.
+fn step_pause_hook() -> tui_lab_core::StepHook {
+    std::sync::Arc::new(|result: &tui_lab_core::StepResult| {
+        println!(
+            "[step {}] {} — {}",
+            result.index, result.kind, result.detail
+        );
+        println!("Enter to continue, q to abort: ");
+        let mut line = String::new();
+        match std::io::stdin().read_line(&mut line) {
+            Ok(_) => !line.trim().eq_ignore_ascii_case("q"),
+            Err(_) => true,
+        }
+    })
 }
 
 /// One-line-per-suite human summary.
@@ -263,12 +287,16 @@ fn print_debug(result: &SuiteResult) {
     }
 }
 
-/// Re-render stored JSON results as JUnit.
+/// Re-render stored JSON results as JUnit or self-contained HTML.
 pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
-    if format != "junit" {
-        eprintln!("--format {format}: only junit for now (html arrives in v2)");
-        return EXIT_CONFIG_ERROR;
-    }
+    let render: fn(&[tui_lab_core::SuiteResult]) -> String = match format {
+        "junit" => tui_lab_reporter::to_junit_all,
+        "html" => tui_lab_reporter::to_html,
+        _ => {
+            eprintln!("--format {format}: expected junit or html");
+            return EXIT_CONFIG_ERROR;
+        }
+    };
     let results = match load_json_all(results_path) {
         Ok(results) => results,
         Err(e) => {
@@ -284,7 +312,7 @@ pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
             }
         }
     }
-    match std::fs::write(out, to_junit_all(&results)) {
+    match std::fs::write(out, render(&results)) {
         Ok(()) => {
             println!("wrote {}", out.display());
             EXIT_OK

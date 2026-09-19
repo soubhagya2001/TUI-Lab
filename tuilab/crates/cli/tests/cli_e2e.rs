@@ -200,5 +200,53 @@ fn report_renders_junit_from_results() {
     assert!(report.status.success());
     let xml = std::fs::read_to_string(&out).expect("read junit");
     assert!(xml.contains("failures=\"0\""));
+    let html_out = dir.join("index.html");
+    let html = Command::new(tuilab())
+        .arg("report")
+        .arg("--format")
+        .arg("html")
+        .arg("--out")
+        .arg(&html_out)
+        .current_dir(&dir)
+        .output()
+        .expect("report html");
+    assert!(html.status.success());
+    let page = std::fs::read_to_string(&html_out).expect("read html");
+    assert!(page.contains("<!DOCTYPE html>"));
+    assert!(page.contains("green"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn run_step_mode_advances_on_piped_enters() {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let dir = scratch("step");
+    let suite = write(&dir, "green.yaml", &green_suite(&fixture_bin()));
+    // Piped Enters auto-continue every pause (q would abort instead).
+    let mut child = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .arg("--step")
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("run suite");
+    child
+        .stdin
+        .as_mut()
+        .expect("step stdin")
+        .write_all(b"\n\n\n\n")
+        .expect("send enters");
+    let output = child.wait_with_output().expect("step run");
+    assert!(
+        output.status.success(),
+        "stdout:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("to continue"), "step prompts shown");
     let _ = std::fs::remove_dir_all(&dir);
 }
