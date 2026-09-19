@@ -191,12 +191,23 @@ fn proto_serves_all_nine_actions() {
     assert!(snap["diff"].is_null(), "{snap}");
 
     // resize then close a clean quit.
+    // Settle the async redraw before quitting (docs/04: follow resize with
+    // wait_for_text); closing immediately after resize races the redraw on
+    // Linux and the quit byte is lost, ending in the SIGHUP kill path.
     let resize = ask(
         &tx,
         &rx,
         format!(r#"{{"action":"resize","session_id":"{sid}","width":80,"height":24}}"#),
     );
     assert_eq!(resize["ok"], true);
+    let settled = ask(
+        &tx,
+        &rx,
+        format!(
+            r#"{{"action":"wait_for_text","session_id":"{sid}","text":"beta-chair","timeout_ms":10000}}"#
+        ),
+    );
+    assert_eq!(settled["found"], true, "{settled}");
     // Close with quit input: graceful reap in one call, no press/close race.
     let close = ask(
         &tx,

@@ -30,6 +30,11 @@ steps:
   - snapshot:
       name: "search-table"
   - press: ESC
+  # Settle lone-ESC before quit: crossterm resolves a bare ESC with a short
+  # timeout, so an immediate `q` can coalesce into Alt+q (ignored) on Linux.
+  # Sync via wait_for_text, never sleep (AGENTS.md §3).
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
   - press: q
 assertions:
   - exit_code: 0
