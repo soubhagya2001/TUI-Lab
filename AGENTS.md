@@ -6,8 +6,8 @@
 
 **TUI Lab** — language-agnostic, black-box testing platform for terminal applications
 ("Playwright for Terminal Applications"). Rust core engine + `tuilab` CLI + `tuilab-mcp`
-MCP server + thin SDKs. Design source of truth: `docs/` (14 files). Status: Phase 1
-complete (Windows-verified), implementation per `docs/14-implementation-roadmap.md` Phases 2–6.
+MCP server + thin SDKs. Design source of truth: `docs/` (14 files). Status: Phase 6
+complete (dual-OS green), implementation per `docs/14-implementation-roadmap.md` Phases 7–12.
 
 ## 2. Read before coding
 

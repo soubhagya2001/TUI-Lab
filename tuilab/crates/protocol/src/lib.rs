@@ -9,4 +9,7 @@ pub mod steps;
 pub mod utils;
 
 pub use actions::Action;
-pub use steps::{Step, SuiteAssertion, TestFile, TextAssertion};
+pub use steps::{
+    Application, RegionAssertion, ResizeTo, SleepFor, SnapshotTake, Step, SuiteAssertion,
+    TerminalConfig, TestFile, TextAssertion, WaitForExit, WaitForText,
+};

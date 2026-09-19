@@ -45,11 +45,20 @@ enum Commands {
         #[arg(long, default_value = "reports/results.json")]
         results: PathBuf,
     },
-    /// Record a session to YAML (v2).
+    /// Record an interactive session to a YAML suite.
     Record {
-        /// Command to launch and record.
+        /// Binary to launch and record.
         #[arg(long)]
         command: Option<String>,
+        /// Extra arguments for the binary (repeatable).
+        #[arg(long)]
+        arg: Vec<String>,
+        /// Output YAML path (default: <command>-record.yaml).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Terminal override, e.g. 120x40.
+        #[arg(long, value_parser = parse_terminal)]
+        terminal: Option<(u16, u16)>,
     },
     /// JSON-lines engine mode for SDK sidecars (docs/09).
     Proto,
@@ -86,7 +95,12 @@ async fn main() {
             out,
             results,
         } => commands::report(&format, &out, &results),
-        Commands::Record { .. } => commands::record(),
+        Commands::Record {
+            command,
+            arg,
+            out,
+            terminal,
+        } => commands::record(command, arg, out, terminal),
         Commands::Proto => proto::serve().await,
     };
     std::process::exit(code);

@@ -69,3 +69,23 @@ session stalls (no prompt, no echo). Consequences for Phase 1:
 *   Separate `stderr` pipe so app logs don't pollute screen asserts.
 *   Ship Windows CI job using Windows Terminal + conhost; fail loudly on ConPTY version < Win10 1809.
 *   Packaging via `cargo-dist`; auto-update deferred to v3.
+
+## 12.5 Linux input-timing rules (proven in CI, Phase 6)
+
+Three CI failures (Ubuntu `proto` close, both-legs `search-flow`) traced to
+one class: **input bytes lost to async races on Linux**. The engine, the
+fixture, and the protocol were all correct — the *sequences* were not. Rules,
+now enforced in our own suites and recommended to every user:
+
+1.  **Never send input immediately after `resize`.** The redraw is async; a
+    byte sent mid-redraw can vanish (observed: quit byte lost → SIGHUP kill
+    path). Always follow `resize` with `wait_for_text` first (`docs/04` already
+    prescribes this — now with CI evidence attached).
+2.  **Never send a key immediately after a lone ESC.** Crossterm-class
+    runtimes resolve a bare ESC with a short timeout, so `ESC` + fast `q`
+    coalesces into Alt+`q` (ignored). Re-sync with `wait_for_text` between
+    them. Sync via waits, never sleeps (`AGENTS.md` §3).
+3.  **Prefer quit-in-close over press-quit-then-close.** `registry.remove`
+    and both `close` actions accept quit input and poll for natural exit
+    within grace before killing — one atomic call instead of two racy
+    round-trips. Added in Phase 6 after the Ubuntu SIGHUP investigation.

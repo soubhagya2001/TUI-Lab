@@ -96,13 +96,13 @@ it, never a second implementation.
 ## 14.5 Acceptance criteria (updated as phases land)
 
 *   [x] Workspace per `14.2` builds on Windows (`cargo fmt/clippy/test` green)
-*   [ ] Workspace builds + tests green on Linux (dual-OS CI defined, never run — no remote yet; see Phase 6)
+*   [x] Workspace builds + tests green on Linux (dual-OS CI green on `main`)
 *   [x] `tuilab run` executes YAML suites against the sample Ratatui app (dogfood `tests/e2e` green)
 *   [ ] Same coverage against a second framework app (Textual placeholder in `05` still open)
 *   [x] `tui_launch/press/screen/wait/assert/close` work via MCP stdio (Mode A/B tests + handshake probe green on Windows)
 *   [x] Snapshot round-trip + regex-mask tests pass; golden diff on mismatch
 *   [ ] Resize matrix 4 sizes green (only 120x40 + 80x24 exercised so far)
-*   [x] JUnit output renders from stored JSON (consumption by GitHub Actions pending first push)
+*   [x] JUnit output renders from stored JSON (consumed by GitHub Actions; failure bundle prints with `--debug` in e2e job)
 
 ## 14.6 Phase status (updated as phases land)
 
@@ -139,6 +139,18 @@ it, never a second implementation.
     deduplicated onto it), Python `tui-lab` SDK (`TuiTest` async API +
     `Runner.run`, 5 pytest green), `docs/09` fast-follow checklists for
     JS/TS + Rust, CI `sdk-python` job.
-*   **Phase 6 — next.** Verification closure: push, first green dual-OS CI,
-    Ubuntu triage, §14.5 boxes checked for real. Nothing above may claim
-    Linux support until then.
+*   **Phase 6 — done (dual-OS green).** Pushed to `origin/main`; fixed the
+    fresh-runner fixture-deps failure (`--offline` dropped), the e2e
+    `--no-run` syntax error, and three Linux input-race failures (resize and
+    lone-ESC sequencing, fixed with `wait_for_text` sync + quit-in-close).
+    Root-cause class recorded in `12` §12.5. Remaining open boxes (second
+    framework app, 4-size matrix) move with v2/Phase 10 work.
+*   **Phase 7 — done (Windows-verified).** `tui-lab-input` key decoder
+    (arrows/F-keys/CTRL/ALT/UTF-8 + decode→encode round-trip tests),
+    `tuilab record` (PTY-owned capture, paced beats, smart `wait_for_text`
+    synthesis with border-stripped targets, verbatim byte forwarding,
+    Ctrl+\ stop chord), `record_replay` proof (scripted stdin → YAML with
+    waits, no sleeps → replay green). Fixed en route: serde `!Variant`
+    tags don't round-trip — `Step`/`SuiteAssertion` now serialize to the
+    single-key-map shape they parse.
+*   **Phase 8 — next.** v2b Parallel fan-out (`JoinSet` runner + `--parallel`).

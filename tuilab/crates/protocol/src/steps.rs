@@ -109,9 +109,9 @@ fn default_height() -> u16 {
 ///
 /// YAML form is a single-key map (`- press: ENTER`). Deserialization is manual
 /// so aliases (`expect`/`screenshot`, `assert_exit_code`) and error messages
-/// stay under our control; serialization uses the derived single-key shape.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+/// stay under our control; serialization is manual too, because serde's
+/// default `!Variant` tags for newtype variants would not round-trip.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     /// Send a named key.
     Press(String),
@@ -216,8 +216,9 @@ pub struct WaitForExit {
 /// End-of-suite assertions.
 ///
 /// Accepts both `exit_code` and the `assert_*` aliases used across docs/05–06.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+/// Serializes back to the same single-key-map shape it parses (serde's
+/// default `!tag` form for scalar newtypes would not round-trip).
+#[derive(Debug, Clone, PartialEq)]
 pub enum SuiteAssertion {
     /// Expected process exit code.
     ExitCode(i32),
@@ -261,6 +262,21 @@ mod humantime_opt {
     }
 }
 
+/// Serialize back to the single-key-map shape this type parses.
+impl Serialize for SuiteAssertion {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        let mut map = ser.serialize_map(Some(1))?;
+        match self {
+            Self::ExitCode(code) => map.serialize_entry("exit_code", code)?,
+            Self::ProcessNotCrashed(flag) => {
+                map.serialize_entry("process_not_crashed", flag)?;
+            }
+        }
+        map.end()
+    }
+}
+
 /// Parse `500ms` / `3s` / `2m`.
 fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
     let (number, unit) = raw
@@ -275,6 +291,32 @@ fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
         "s" => Ok(Duration::from_secs(value)),
         "m" => Ok(Duration::from_secs(value * 60)),
         other => Err(format!("bad duration unit in {raw}: {other}")),
+    }
+}
+
+/// Serialize back to the single-key-map shape this type parses.
+impl Serialize for Step {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        let mut map = ser.serialize_map(Some(1))?;
+        match self {
+            Self::Press(key) => map.serialize_entry("press", key)?,
+            Self::Type(text) => map.serialize_entry("type", text)?,
+            Self::WaitForText(wait) => map.serialize_entry("wait_for_text", wait)?,
+            Self::Sleep(sleep) => {
+                map.serialize_entry("sleep", &format!("{}ms", sleep.0.as_millis()))?
+            }
+            Self::Resize(to) => map.serialize_entry("resize", to)?,
+            Self::AssertText(assertion) | Self::Expect(assertion) => {
+                map.serialize_entry("assert_text", assertion)?;
+            }
+            Self::AssertRegion(region) => map.serialize_entry("assert_region", region)?,
+            Self::Snapshot(take) | Self::Screenshot(take) => {
+                map.serialize_entry("snapshot", take)?;
+            }
+            Self::WaitForExit(wait) => map.serialize_entry("wait_for_exit", wait)?,
+        }
+        map.end()
     }
 }
 

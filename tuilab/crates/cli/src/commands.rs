@@ -256,9 +256,27 @@ pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
     }
 }
 
-/// `record` placeholder: the interactive recorder arrives in v2.
-pub fn record() -> i32 {
-    eprintln!("tuilab record arrives in v2 (see docs/10-recorder-and-ai.md)");
-    eprintln!("({})", crate::utils::exit_message(EXIT_CONFIG_ERROR));
-    EXIT_CONFIG_ERROR
+/// Record an interactive session to a YAML suite (docs/10).
+///
+/// Thin adapter: argument mapping lives here, capture + synthesis in
+/// [`crate::recorder`].
+pub fn record(
+    command: Option<String>,
+    args: Vec<String>,
+    out: Option<PathBuf>,
+    terminal: Option<(u16, u16)>,
+) -> i32 {
+    let Some(command) = command else {
+        eprintln!("record needs --command <binary> (see `tuilab record --help`)");
+        return EXIT_CONFIG_ERROR;
+    };
+    let out = out.unwrap_or_else(|| {
+        let stem = Path::new(&command)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "recording".to_string());
+        PathBuf::from(format!("{stem}-record.yaml"))
+    });
+    let (width, height) = terminal.unwrap_or((120, 40));
+    crate::recorder::run(&command, &args, &out, width, height)
 }

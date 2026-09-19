@@ -17,8 +17,9 @@ tuilab run tests/search.yaml
 tuilab run tests/ --terminal 120x40
 # (--parallel arrives in v2; Phase 3 runs sequentially)
 
-# Interactive recording (v2 — Phase 3 prints a pointer)
-tuilab record --command "./codegraph"
+# Interactive recording (drives the app, emits YAML with smart waits)
+tuilab record --command "./codegraph" --out tests/codegen.yaml
+# end with Ctrl+\ or stdin EOF; quit the app first (see docs/10)
 
 # Re-render stored results as JUnit
 tuilab report --format junit --out results.xml
