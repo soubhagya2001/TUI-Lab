@@ -12,10 +12,12 @@ tuilab init
 # Run all tests (defaults to the configured tests dir)
 tuilab run
 
-# Run one file / dir
+# Run one file / dir (sequential by default; --parallel fans out, run-all)
 tuilab run tests/search.yaml
 tuilab run tests/ --terminal 120x40
-# (--parallel arrives in v2; Phase 3 runs sequentially)
+tuilab run tests/ --parallel 4
+# Slots clamp to [1, registry cap 8]; results stay in input order; a failing
+# suite never aborts its siblings.
 
 # Interactive recording (drives the app, emits YAML with smart waits)
 tuilab record --command "./codegraph" --out tests/codegen.yaml

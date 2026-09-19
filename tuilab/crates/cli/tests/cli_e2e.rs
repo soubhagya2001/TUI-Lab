@@ -103,6 +103,35 @@ fn run_green_suite_exits_zero_with_results() {
 }
 
 #[test]
+fn run_parallel_dir_reports_both_suites() {
+    let dir = scratch("parallel");
+    let bin = fixture_bin();
+    write(
+        &dir,
+        "a.yaml",
+        &green_suite(&bin).replace("name: green", "name: par-a"),
+    );
+    write(
+        &dir,
+        "b.yaml",
+        &green_suite(&bin).replace("name: green", "name: par-b"),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&dir)
+        .arg("--parallel")
+        .arg("2")
+        .current_dir(&dir)
+        .output()
+        .expect("run suites");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout:\n{stdout}");
+    assert!(stdout.contains("par-a") && stdout.contains("par-b"));
+    assert!(stdout.contains("2 passed, 0 failed"), "stdout:\n{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn run_failing_suite_exits_one() {
     let dir = scratch("failing");
     let suite = write(

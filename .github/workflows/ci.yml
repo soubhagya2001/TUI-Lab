@@ -40,6 +40,7 @@ jobs:
       - run: cargo build -p tui-lab-cli
       - run: cargo build --manifest-path tests/fixtures/ratatui-sample/Cargo.toml
       - run: cargo run -p tui-lab-cli -- run tests/e2e --debug
+      - run: cargo run -p tui-lab-cli -- run tests/e2e --parallel 2
       - run: cargo test -p tui-lab-mcp --test stdio_probe
 
   sdk-python:

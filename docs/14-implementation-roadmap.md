@@ -153,4 +153,11 @@ it, never a second implementation.
     waits, no sleeps → replay green). Fixed en route: serde `!Variant`
     tags don't round-trip — `Step`/`SuiteAssertion` now serialize to the
     single-key-map shape they parse.
-*   **Phase 8 — next.** v2b Parallel fan-out (`JoinSet` runner + `--parallel`).
+*   **Phase 8 — done (Windows-verified).** `tui-lab-core` `run_suites`
+    (`JoinSet` + semaphore capped at 8, input-ordered results, run-all
+    semantics with infra errors as failed results), `tuilab run --parallel`
+    (default from `tuilab.yaml`, sequential path untouched), overlap + order
+    + containment tests, `--parallel 2` added to the CI e2e job.
+*   **Phase 9 — next.** v2c Reports + input + deferred mechanics (HTML,
+    mouse, `--step`, `region:` masks, separate `stderr`, numeric exit
+    codes, per-cell screens).

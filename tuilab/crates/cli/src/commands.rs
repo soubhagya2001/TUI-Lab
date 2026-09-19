@@ -95,14 +95,17 @@ fn collect_yaml_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Stri
     Ok(())
 }
 
-/// Run suites sequentially; returns the CLI exit code.
+/// Run suites (sequentially or in parallel); returns the CLI exit code.
 ///
 /// `path` defaults to the configured `tests_dir` (`tuilab run` with no args).
+/// `parallel` defaults to the configured slot count; 1 keeps the exact
+/// sequential behavior (including immediate infra-error exits).
 pub async fn run(
     path: Option<&Path>,
     terminal_override: Option<(u16, u16)>,
     debug: bool,
     step_mode: bool,
+    parallel: Option<usize>,
 ) -> i32 {
     if step_mode {
         eprintln!("--step arrives with the interactive runner (v2); run without it for now");
@@ -134,53 +137,64 @@ pub async fn run(
 
     let mut results = Vec::new();
     let mut exit = EXIT_OK;
-    for suite_path in &suites {
-        let text = match std::fs::read_to_string(suite_path) {
-            Ok(text) => text,
-            Err(e) => {
-                eprintln!("read {}: {e}", suite_path.display());
-                return EXIT_CONFIG_ERROR;
+    let slots = parallel
+        .unwrap_or(config.parallel)
+        .clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
+    if slots == 1 {
+        for suite_path in &suites {
+            let (file, opts) = match load_suite(suite_path, &config, terminal_override) {
+                Ok(loaded) => loaded,
+                Err(code) => return code,
+            };
+            match run_file(&file, &opts).await {
+                Ok(result) => {
+                    print_summary(&result);
+                    if debug {
+                        print_debug(&result);
+                    }
+                    if !result.passed {
+                        exit = EXIT_TESTS_FAILED;
+                    }
+                    results.push(result);
+                }
+                Err(e) => {
+                    // Infrastructure breakdown: launch/PTY/timeout (exits 3/4).
+                    eprintln!("{}: {e}", suite_path.display());
+                    let message = e.to_string();
+                    if message.starts_with("launch failed") || message.starts_with("pty failed") {
+                        return EXIT_PTY_ERROR;
+                    }
+                    if message.starts_with("timed out") {
+                        return EXIT_TIMEOUT;
+                    }
+                    return EXIT_TESTS_FAILED;
+                }
             }
-        };
-        let mut file = match TestFile::from_yaml(&text) {
-            Ok(file) => file,
-            Err(e) => {
-                // Parse errors never launch anything (exit 2).
-                eprintln!("{}: {e}", suite_path.display());
-                return EXIT_CONFIG_ERROR;
+        }
+    } else {
+        // Parallel: parse everything first so a schema error still exits 2
+        // before anything launches; then fan out with run-all semantics
+        // (infra errors arrive as failed results, never aborts).
+        let mut files = Vec::with_capacity(suites.len());
+        for suite_path in &suites {
+            match load_suite(suite_path, &config, terminal_override) {
+                Ok((file, _)) => files.push(file),
+                Err(code) => return code,
             }
-        };
-        if let Some((width, height)) = terminal_override {
-            file.terminal.width = width;
-            file.terminal.height = height;
         }
         let opts = RunOptions {
             snapshot_dir: PathBuf::from(&config.snapshots_dir),
             ..RunOptions::default()
         };
-        match run_file(&file, &opts).await {
-            Ok(result) => {
-                print_summary(&result);
-                if debug {
-                    print_debug(&result);
-                }
-                if !result.passed {
-                    exit = EXIT_TESTS_FAILED;
-                }
-                results.push(result);
+        for result in tui_lab_core::run_suites(files, &opts, slots).await {
+            print_summary(&result);
+            if debug {
+                print_debug(&result);
             }
-            Err(e) => {
-                // Infrastructure breakdown: launch/PTY/timeout (exits 3/4).
-                eprintln!("{}: {e}", suite_path.display());
-                let message = e.to_string();
-                if message.starts_with("launch failed") || message.starts_with("pty failed") {
-                    return EXIT_PTY_ERROR;
-                }
-                if message.starts_with("timed out") {
-                    return EXIT_TIMEOUT;
-                }
-                return EXIT_TESTS_FAILED;
+            if !result.passed {
+                exit = EXIT_TESTS_FAILED;
             }
+            results.push(result);
         }
     }
 
@@ -192,6 +206,32 @@ pub async fn run(
     let passed = results.iter().filter(|result| result.passed).count();
     println!("{passed} passed, {} failed", results.len() - passed);
     exit
+}
+
+/// Read, parse, and tune one suite file. Errors exit before any launch.
+fn load_suite(
+    suite_path: &Path,
+    config: &crate::config::ProjectConfig,
+    terminal_override: Option<(u16, u16)>,
+) -> Result<(TestFile, RunOptions), i32> {
+    let text = std::fs::read_to_string(suite_path).map_err(|e| {
+        eprintln!("read {}: {e}", suite_path.display());
+        EXIT_CONFIG_ERROR
+    })?;
+    let mut file = TestFile::from_yaml(&text).map_err(|e| {
+        // Parse errors never launch anything (exit 2).
+        eprintln!("{}: {e}", suite_path.display());
+        EXIT_CONFIG_ERROR
+    })?;
+    if let Some((width, height)) = terminal_override {
+        file.terminal.width = width;
+        file.terminal.height = height;
+    }
+    let opts = RunOptions {
+        snapshot_dir: PathBuf::from(&config.snapshots_dir),
+        ..RunOptions::default()
+    };
+    Ok((file, opts))
 }
 
 /// One-line-per-suite human summary.

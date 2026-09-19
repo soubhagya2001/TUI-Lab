@@ -29,6 +29,9 @@ enum Commands {
         /// Print the full failure bundle on failure.
         #[arg(long)]
         debug: bool,
+        /// Parallel slots (default: tuilab.yaml `parallel`).
+        #[arg(long)]
+        parallel: Option<usize>,
         /// Step-through mode (v2).
         #[arg(long)]
         step: bool,
@@ -89,7 +92,8 @@ async fn main() {
             terminal,
             debug,
             step,
-        } => commands::run(path.as_deref(), terminal, debug, step).await,
+            parallel,
+        } => commands::run(path.as_deref(), terminal, debug, step, parallel).await,
         Commands::Report {
             format,
             out,

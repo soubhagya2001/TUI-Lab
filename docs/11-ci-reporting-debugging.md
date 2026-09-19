@@ -13,6 +13,11 @@ GitHub Actions / GitLab / Jenkins
 
 Example assertion in CI: build release binary, then `tuilab run`.
 
+Parallel runs (`--parallel N`) fan suites out over a semaphore (capped by
+the registry limit of 8) with run-all semantics: every suite completes, no
+sibling aborts, and `results.json` / JUnit reassemble in input order so
+reports stay diffable run-over-run.
+
 ## 11.2 Report formats (v1: JSON + JUnit; v2: +HTML)
 
 *   `reports/results.json` — full step trace, timings, screens.

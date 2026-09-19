@@ -21,6 +21,7 @@ use crate::error::{CoreError, Result};
 use crate::result::{FailureInfo, StepResult, SuiteResult, TerminalInfo};
 
 /// Runner tuning (overridable by future CLI flags).
+#[derive(Debug, Clone)]
 pub struct RunOptions {
     /// Default `wait_for_text` timeout.
     pub wait_default: Duration,
