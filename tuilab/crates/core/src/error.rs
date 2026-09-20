@@ -5,8 +5,6 @@
 /// Errors raised by session orchestration.
 #[derive(Debug)]
 pub enum CoreError {
-    /// Called before the Phase implementing it lands.
-    NotImplemented(&'static str),
     /// The child could not be spawned (CLI maps to exit 3).
     Launch(String),
     /// PTY I/O failed mid-run: read, write, resize, wait (CLI maps to exit 3).
@@ -20,7 +18,6 @@ pub enum CoreError {
 impl std::fmt::Display for CoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotImplemented(what) => write!(f, "not implemented: {what}"),
             Self::Launch(msg) => write!(f, "launch failed: {msg}"),
             Self::Pty(msg) => write!(f, "pty failed: {msg}"),
             Self::Timeout(msg) => write!(f, "timed out: {msg}"),

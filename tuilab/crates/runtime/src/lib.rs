@@ -1,6 +1,6 @@
 //! Runtime supervisor: timeouts, retries, polling, parallelism (docs/02 §2.2).
 //!
-//! Phase 0 scaffold — implementation arrives in Phase 2.
+//! Generic over screen sources so waits stay deterministic without a PTY.
 
 pub mod constants;
 pub mod error;

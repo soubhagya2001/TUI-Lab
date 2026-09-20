@@ -121,3 +121,7 @@ see `docs/12-cross-platform-strategy.md`).
 * Small, focused commits; conventional messages (`feat(pty): …`, `fix(emulator): …`,
   `docs(mcp): …`). Never commit `reports/`, `target/`, or snapshot `.new` files.
 * No secrets in YAML fixtures; use `sensitive: true` typing paths in tests.
+* Releases: `git tag vX.Y.Z` on green `main` triggers `release.yml`
+  (cargo-dist builds archives for Win/Linux/macOS). Stay on `0.x.y`
+  SemVer discipline — breaking pre-1.0 changes allowed, recorded in the
+  release notes. SDK versions move in lockstep with the engine.

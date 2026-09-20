@@ -1,6 +1,5 @@
-//! Session-based JSON test protocol v1 (docs/04).
-//!
-//! Phase 0 scaffold — serde types arrive in Phase 2.
+//! Session-based JSON test protocol v1 (docs/04): actions, YAML steps,
+//! strict validation. The single definition every frontend speaks.
 
 pub mod actions;
 pub mod constants;

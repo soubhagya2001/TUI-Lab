@@ -1,6 +1,5 @@
-//! Assertion engine over terminal state (docs/06 §6.1).
-//!
-//! Phase 0 scaffold — taxonomy implementation arrives in Phase 2.
+//! Assertion engine over terminal state (docs/06 §6.1): taxonomy,
+//! JSON mapping, and evaluation against plain screen views.
 
 pub mod conditions;
 pub mod constants;

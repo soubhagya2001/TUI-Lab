@@ -3,8 +3,6 @@
 /// Errors raised while parsing or validating protocol payloads.
 #[derive(Debug)]
 pub enum ProtocolError {
-    /// Called before the Phase implementing it lands.
-    NotImplemented(&'static str),
     /// Malformed JSON/YAML or shape mismatch.
     Schema(String),
     /// Unsupported `schema:` id (breaking change → new version).
@@ -16,7 +14,6 @@ pub enum ProtocolError {
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotImplemented(what) => write!(f, "not implemented: {what}"),
             Self::Schema(msg) => write!(f, "protocol schema error: {msg}"),
             Self::Version(id) => write!(f, "unsupported schema version: {id}"),
             Self::Message(msg) => write!(f, "{msg}"),

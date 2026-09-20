@@ -1,6 +1,7 @@
 //! Test orchestration: sessions, lifecycle, step pipeline (docs/02).
 //!
-//! Phase 0 scaffold — types arrive in Phase 2.
+//! Single-session runner, parallel fan-out, and the shared live-session
+//! registry behind every frontend.
 
 pub mod constants;
 pub mod context;

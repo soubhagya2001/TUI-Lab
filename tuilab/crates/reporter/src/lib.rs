@@ -1,6 +1,7 @@
-//! Reporters: JSON results, JUnit XML (v1), HTML (v2) — docs/11.
+//! Reporters: JSON results, JUnit XML, self-contained HTML — docs/11.
 //!
-//! Phase 0 scaffold — implementation arrives in Phase 3.
+//! Pure formatters over core result types; every format re-renders the
+//! same stored JSON so outputs can never disagree.
 
 pub mod constants;
 pub mod error;

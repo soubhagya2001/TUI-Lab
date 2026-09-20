@@ -67,8 +67,8 @@ Still future: `sdks/{javascript,rust}/`, `examples/{python-textual,go-bubbletea,
 *   **Phase 8 — v2b Parallel fan-out:** `JoinSet` runner + `--parallel N` within the registry cap of 8; per-suite isolation; combined reports; deterministic ordering.
 *   **Phase 9 — v2c in slices:** 9a HTML reports + `--step` runner (done) → 9b mouse input, full loop → 9c `region:` masks, separate `stderr`, numeric exit codes, per-cell `styled` screens.
 *   **Phase 10 — SDK fast-follows:** JS/TS (`@tui-lab/sdk`) then Rust (`tui-lab-sdk`), same sidecar contract, mirrored fixture flows + CI jobs; no native bindings.
-*   **Phase 11 — Instrumentation (gated):** optional element/focus-tree adapters (Ratatui first). Requires a grill round first. Black-box path always stays.
-*   **Phase 12 — Release hardening + v3 scouting:** `cargo-dist` packaging, stale scaffold comments swept, dead `NotImplemented` variants evaluated, versioning/release process decided. v3 (studio, AI, remote agents) stays tracked in §14.4, not planned in detail.
+*   **Phase 11 — parked post-release (grill decision).** Optional element/focus-tree adapters via sidecar-file tree + extended asserts. Black-box path always stays.
+*   **Phase 12 — Release hardening:** `cargo-dist` packaging, stale scaffold comments swept, dead `NotImplemented` variants evaluated, versioning/release process decided (§14.7). v3 (studio, AI, remote agents) stays tracked in §14.4, not planned in detail.
 
 ## 14.4 MVP scope
 
@@ -178,4 +178,23 @@ it, never a second implementation.
     `node:test`, mirrored flow green) + `tui-lab-sdk` workspace member
     (same surface, `tokio` tests green); `proto_roundtrip` unmodified —
     the shared contract held across all three clients. CI `sdk-js` job.
-*   **Phase 11 — next.** Gated instrumentation (adapters, grill first).
+*   **Phase 11 — parked post-release (grill decision).** Sidecar-file tree
+    + extended asserts, when it happens — not before release.
+*   **Phase 12 — done (Windows-verified).** Dead `NotImplemented`
+    variants + stale scaffold comments swept (behavior-free, gates prove
+    it); `cargo-dist` packaging (`tuilab` + `tuilab-mcp` × Win/Linux/macOS
+    archives, release workflow on `v*` tags, release profile builds
+    green); versioning decided below.
+
+## 14.7 Release process (DECIDED Phase 12 — overturn via grill)
+
+*   Stay on `0.1.0` until the first tagged release, then `0.x.y`
+    SemVer discipline: breaking pre-1.0 changes allowed, recorded in the
+    release notes. SDK versions (`tui-lab`, `@tui-lab/sdk`, `tui-lab-sdk`)
+    move in lockstep with the engine.
+*   Cut a release: green `main` → `git tag vX.Y.Z` → `release.yml`
+    (cargo-dist) builds archives + checksums for Win/Linux/macOS and
+    attaches them to the GitHub Release. Linux/macOS artifacts are
+    CI-built, never claimed from local builds.
+*   Explicitly NOT published (yet): crates.io, PyPI, npm, installers
+    beyond archives, auto-update. Registry publishing waits on demand.

@@ -1,6 +1,5 @@
-//! Keyboard/mouse input encoding (docs/03 §3.3).
-//!
-//! Phase 0 scaffold — key tables and encoders arrive in Phase 1.
+//! Keyboard/mouse input encoding (docs/03 §3.3): xterm key tables,
+//! SGR mouse actions, and the key decoder the recorder builds on.
 
 pub mod constants;
 pub mod decode;
