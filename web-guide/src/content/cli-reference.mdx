@@ -1,0 +1,65 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# CLI reference
+
+## Commands
+
+```bash
+# Scaffold project -> tuilab.yaml + tests/smoke.yaml
+tuilab init
+
+# Run all tests (defaults to the configured tests dir)
+tuilab run
+
+# Run one file / dir (sequential by default; --parallel fans out, run-all)
+tuilab run tests/e2e/smoke.yaml --parallel 4
+
+# Interactive recording (drives the app, emits YAML with smart waits)
+# end with Ctrl+\ or stdin EOF; quit the app first
+tuilab record -- ./myapp
+
+# Re-render stored results (JUnit or self-contained HTML)
+tuilab report --format html
+
+# Debug a failed run (full failure bundle: screens, history, diffs)
+tuilab debug reports/results.json
+
+# Step through a run interactively (Enter continues, q aborts; forces sequential)
+tuilab run tests/e2e --step
+
+# JSON-lines engine mode for SDK sidecars — one action in, one reply out
+tuilab proto
+```
+
+Slots clamp to `[1, registry cap 8]`; results stay in input order; a failing suite never aborts its siblings.
+
+## `tuilab.yaml`
+
+```yaml
+version: "1.0"
+tests_dir: tests
+snapshots_dir: tests/snapshots
+default_terminal: { width: 120, height: 40 }
+default_timeout: 10s
+parallel: 4
+report: { json: reports/results.json, html: reports/index.html, junit: reports/junit.xml }
+env:
+  TERM: xterm-256color
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All passed |
+| 1 | ≥1 test failed |
+| 2 | Config/schema error |
+| 3 | App launch / PTY error |
+| 4 | Timeout / hung process killed |
+
+<Callout title="SDKs speak proto">The Python, JavaScript, and Rust SDKs are thin sidecars: they spawn `tuilab proto` and exchange one JSON action per line. See SDKs.</Callout>
+
+## Next
+
+- **CI & troubleshooting** — the GitHub Actions example.
+- **MCP & AI agents** — drive sessions from an agent instead of YAML.

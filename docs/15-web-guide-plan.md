@@ -1,8 +1,9 @@
 # 15 — Web Guide Plan (`web-guide/` developer docs site)
 
-> **Status:** planned, not built. Decisions locked with user: Vite + React 19 + MDX,
-> GitHub Pages via `deploy-pages` artifact, app at repo-root `web-guide/`,
-> terminal-green accent, dark default + light toggle.
+> **Status:** built and tested (Windows-verified). App at repo-root `web-guide/`,
+> Vite + React 19 + MDX, terminal-green accent, dark default + light toggle.
+> Playwright e2e (chromium, 7 tests) green; `web-guide.yml` builds, tests,
+> and deploys to GitHub Pages.
 
 ## 15.1 What this is
 

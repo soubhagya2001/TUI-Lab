@@ -1,0 +1,51 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# CI & troubleshooting
+
+## GitHub Actions example
+
+```yaml
+# .github/workflows/tui.yml
+jobs:
+  tui:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p tui-lab-cli
+      - run: ./target/release/tuilab run tests/e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-bundle-${{ matrix.os }}
+          path: reports/
+```
+
+## Reports
+
+- **JSON** — machine-readable results for dashboards.
+- **JUnit** — understood by every CI test tab.
+- **HTML** — self-contained run report via `tuilab report --format html`.
+
+## Failure bundle
+
+Every failure captures screens, input history, and snapshot diffs. Start with `tuilab debug reports/results.json`, then open the HTML report for the visual diff.
+
+## Known cross-platform pitfalls
+
+<Callout title="Windows ConPTY" tone="warning">ConPTY opens with an `ESC[6n` handshake the engine must answer; key-press/release double-fires unless filtered; children need an explicit CWD; always test resize paths on Windows — they diverge most from Unix PTYs.</Callout>
+
+<Callout title="Linux timing" tone="warning">Input races appear first on fast Linux runners: follow every state-changing step with `wait_for_text`. If a suite is green locally but red in CI, a missing wait is the prime suspect.</Callout>
+
+## FAQ
+
+**Flaky snapshot?** Mask volatile regions (timestamps, PIDs, durations) — see Assertions & snapshots.
+
+**Hang / timeout (exit 4)?** The app never painted the waited text. Check `TERM=xterm-256color`, terminal size, and that the app actually starts non-interactively.
+
+**Works on Windows, fails on Linux (or reverse)?** Compare the failure-bundle screens first — usually a timing wait or a ConPTY key-encoding difference.
+
+**MCP launch rejected?** The command must match `security.allow_commands` and `cwd` must sit under the project root.

@@ -1,0 +1,30 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# Recorder
+
+`tuilab record` is the Playwright-Codegen equivalent: drive the app, get YAML with smart waits synthesized for you.
+
+## Recording a flow
+
+```bash
+tuilab record -- myapp --flag
+# drive the app with your keyboard...
+# end with Ctrl+\ or stdin EOF — quit the app first (q)
+```
+
+The recorder owns the PTY, paces input in beats, forwards bytes verbatim, and emits a suite where pauses become `wait_for_text` steps with border-stripped targets — never `sleep`.
+
+## Replay the capture
+
+```bash
+tuilab run tests/recorded-login.yaml
+```
+
+Recorded YAML is ordinary `tui-lab/v1`: edit it, add `assert_text` and masks, commit it like a hand-written suite.
+
+<Callout title="Quit first">Always quit the app before ending the recording. The trailing shutdown sequence otherwise lands in your suite as mystery steps.</Callout>
+
+## Next
+
+- **Writing tests** — hand-tune what the recorder emitted.
+- **CLI reference** — all `record` flags.

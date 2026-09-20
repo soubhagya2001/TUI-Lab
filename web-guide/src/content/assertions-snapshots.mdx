@@ -1,0 +1,61 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# Assertions & snapshots
+
+## Taxonomy
+
+Text:
+
+```yaml
+- assert_text:
+    contains: "Dashboard"
+- assert:
+    text_visible: "Dashboard"
+```
+
+Screen behavior:
+
+```yaml
+- expect:
+    screen_changed: true
+- expect:
+    startup_time_less_than: 2s
+```
+
+Regions (scope a check to part of the screen):
+
+```yaml
+- assert_region:
+    x: 0
+    y: 0
+    width: 80
+    height: 5
+    contains: "CodeGraph"
+```
+
+Cursor and process:
+
+```yaml
+assertions:
+  - cursor_position:
+      row: 3
+      col: 10
+- assert_exit_code: 0
+- assert_process_not_crashed: true
+```
+
+## Snapshots (two kinds)
+
+- **Golden snapshots** — full-screen text compared against a stored file. First run writes the golden; later runs diff.
+- **Masked snapshots** — volatile regions (timestamps, CPU/RAM, IDs) declared with `region:` masks so goldens stay deterministic.
+
+<Callout title="Mask everything volatile">Time, PIDs, durations, and random IDs must be maskable. An unmasked golden is a flaky test waiting for CI to prove it.</Callout>
+
+## Timing / retry semantics
+
+Every wait and assertion carries a timeout with polling + retry. Tune per step with `timeout:` — generous on launch and first paint, tight on steady-state interactions.
+
+## Next
+
+- **Recorder** — capture assertions from a live session.
+- **CI & troubleshooting** — read failure diffs in the HTML report.

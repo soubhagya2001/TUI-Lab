@@ -1,0 +1,45 @@
+import { Callout, CodeTabs } from '../components/callout-code-tabs';
+
+# SDKs
+
+One rule: **SDKs are thin wrappers**. No native PTY code — each SDK spawns the `tuilab` binary and speaks the `tuilab proto` JSON-lines wire contract (one action in, one reply out). Priority order: Python first, then JavaScript, then Rust. Versions move in lockstep with the engine.
+
+<CodeTabs tabs={[
+  {
+    label: 'Python', value: 'python', content:
+    <pre><code>{`from tuilab import TuiTest
+
+with TuiTest("./myapp") as t:
+    t.wait_for_text("Main Menu", timeout=5)
+    t.press("ENTER")
+    t.wait_for_text("Dashboard")
+    t.assert_text(contains="Dashboard")`}</code></pre>,
+  },
+  {
+    label: 'JavaScript', value: 'js', content:
+    <pre><code>{`import { TuiTest } from "@tui-lab/sdk";
+
+using t = await TuiTest.launch("./myapp");
+await t.waitForText("Main Menu", { timeout: 5000 });
+await t.press("ENTER");
+await t.waitForText("Dashboard");
+await t.assertText({ contains: "Dashboard" });`}</code></pre>,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <pre><code>{`use tui_lab_sdk::TuiTest;
+
+let t = TuiTest::launch("./myapp").await?;
+t.wait_for_text("Main Menu", Duration::from_secs(5)).await?;
+t.press("ENTER").await?;
+t.wait_for_text("Dashboard", Duration::from_secs(5)).await?;
+t.assert_text_contains("Dashboard").await?;`}</code></pre>,
+  },
+]} />
+
+<Callout title="Binary resolution">Each SDK locates the `tuilab` binary (PATH, then well-known build locations) and surfaces a clear error when it is missing — install the engine first (see Getting started).</Callout>
+
+## Next
+
+- **Writing tests** — the YAML both SDKs and CLI share.
+- **MCP & AI agents** — agent access over MCP instead.

@@ -1,0 +1,38 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# MCP & AI agents
+
+`tuilab-mcp` exposes the engine to AI agents over the Model Context Protocol: nine small, powerful tools.
+
+## Tool list
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `tui_launch` | `{ command, args?, cwd?, width?, height?, env? }` | `{ session_id, status, screen }` |
+| `tui_press` | `{ session_id, key }` | `{ ok, screen_changed }` |
+| `tui_type` | `{ session_id, text }` | `{ ok }` |
+| `tui_screen` | `{ session_id, style? }` | `{ width, height, cursor, text, cells? }` |
+| `tui_wait_for_text` | `{ session_id, text, timeout_ms?, regex? }` | `{ found, elapsed_ms, screen }` |
+| `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
+| `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
+| `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
+| `tui_close` | `{ session_id, quit? }` | `{ success, exit_code, signal }` |
+
+`tui_close` returns `success` + numeric `exit_code` + `signal`. `tui_screen { styled: true }` returns the per-cell array. `tui_snapshot` returns `{ saved: true }` when it writes a new golden.
+
+## Mode A — interactive agent testing
+
+The agent launches a session and pokes at the app itself: press keys, read screens, wait for text — exploratory testing with a live terminal.
+
+## Mode B — automated execution
+
+The agent runs whole suites via `tui_run_test` and triages the structured failures. Best for CI-adjacent agent loops.
+
+## Session & safety rules
+
+<Callout title="Allowlist + cwd jail">`tui_launch` only runs commands matching `security.allow_commands` in `tuilab.yaml`, and `cwd` must resolve under the project root. `tui_type { sensitive: true }` redacts from logs. Max 8 concurrent sessions, 60s idle kill.</Callout>
+
+## Next
+
+- **SDKs** — programmatic access without the agent loop.
+- **CI & troubleshooting** — failure bundles agents can read too.

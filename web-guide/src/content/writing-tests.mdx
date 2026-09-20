@@ -1,0 +1,58 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# Writing tests
+
+One portable YAML format (`tui-lab/v1`) runnable from the CLI, MCP (`tui_run_test`), and SDKs.
+
+## Minimal suite
+
+```yaml
+schema: tui-lab/v1
+name: Navigation Test
+application:
+  command: "./myapp"
+  args: []
+  cwd: .
+environment:
+  TERM: xterm-256color
+terminal:
+  width: 120
+  height: 40
+setup:
+  - wait_for_text: "Main Menu"
+    timeout: 5s
+steps:
+  - press: ENTER
+  - wait_for_text: "Dashboard"
+  - assert_text:
+      contains: "Dashboard"
+cleanup:
+  - press: q
+assertions:
+  - exit_code: 0
+```
+
+## Step reference (v1)
+
+| Step | Purpose |
+|------|---------|
+| `launch` | Start the app (usually implicit in `application`) |
+| `press` | Send a key (`ENTER`, `q`, `CTRL+C`, arrows, F-keys) |
+| `type` | Type literal text (use `sensitive: true` for secrets — redacted from logs) |
+| `wait_for_text` | Poll the screen until text appears (timeout + retry — **never `sleep`**) |
+| `screen` | Capture the current screen for inspection |
+| `assert` | Check text, cursor, screen-change, or startup-time conditions |
+| `snapshot` | Compare against (or record) a golden snapshot |
+| `resize` | Resize the terminal mid-test |
+| `close` | Close the session and check the exit code |
+
+## The golden rule: sync via waits
+
+Every interaction that changes the screen must be followed by `wait_for_text`, not a fixed delay. Waits poll with timeout + retry, so suites stay fast on quick machines and stable on slow CI runners.
+
+<Callout title="ConPTY caution" tone="warning">On Windows, key handling and resize behave slightly differently than on Unix PTYs. New suites should pass on both before merge — the CI &amp; troubleshooting chapter lists the known pitfalls.</Callout>
+
+## Next
+
+- **Assertions & snapshots** — the full assertion taxonomy, masking, and retry semantics.
+- **Recorder** — generate this YAML by driving the app instead of hand-writing it.
