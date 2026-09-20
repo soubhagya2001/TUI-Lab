@@ -60,3 +60,25 @@ jobs:
         working-directory: tuilab
       - run: uv run --with pytest python -m pytest tests/ -q
         working-directory: tuilab/sdks/python
+
+  sdk-js:
+    name: js sdk (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tuilab/sdks/javascript/package-lock.json
+      - run: cargo build -p tui-lab-cli
+        working-directory: tuilab
+      - run: npm ci --no-audit --no-fund
+        working-directory: tuilab/sdks/javascript
+      - run: npm test
+        working-directory: tuilab/sdks/javascript

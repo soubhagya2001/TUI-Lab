@@ -174,5 +174,8 @@ it, never a second implementation.
     cells (`Emulator::cells` → goldens → `tui_screen styled`). Child
     `stderr` separation recorded as decided-against on portable-pty 0.9
     (no redirect API) rather than built fragile.
-*   **Phase 10 — next.** SDK fast-follows: JS/TS (`@tui-lab/sdk`) then Rust
-    (`tui-lab-sdk`), same sidecar contract, mirrored fixture flows + CI.
+*   **Phase 10 — done (Windows-verified).** `@tui-lab/sdk` (typed TS,
+    `node:test`, mirrored flow green) + `tui-lab-sdk` workspace member
+    (same surface, `tokio` tests green); `proto_roundtrip` unmodified —
+    the shared contract held across all three clients. CI `sdk-js` job.
+*   **Phase 11 — next.** Gated instrumentation (adapters, grill first).

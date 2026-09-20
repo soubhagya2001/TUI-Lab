@@ -61,13 +61,14 @@ CLI, MCP, and all SDKs program against this.
 1.  **Python** (`pip install tui-lab`) — covers Textual/Rich/Urwid. DONE:
     `tuilab/sdks/python` (`TuiTest` async API + `Runner.run`), sidecar over
     `tuilab proto`, pytest suite green on Windows (Linux via CI).
-2.  **JavaScript/TypeScript** (`@tui-lab/sdk`) — covers Ink/blessed.
-    FAST-FOLLOW template: port `_proto.py` (newline framing, TUILAB_BIN
-    resolution) and the `TuiTest` method set 1:1; mirror
-    `test_fixture_flow.py` with the same steps; `npm test` on both OSes.
-3.  **Rust** (`tui-lab-sdk` crate) — covers Ratatui/Cursive/Crossterm.
-    FAST-FOLLOW template: same sidecar path (no core linking per DECIDED),
-    same method set, same fixture flow as a `tokio` integration test.
+2.  **JavaScript/TypeScript** (`@tui-lab/sdk`) — covers Ink/blessed. DONE:
+    `tuilab/sdks/javascript` (typed `TuiTest` + `Runner`, `node:test`
+    suite, `npm run build && npm test`), same sidecar contract, mirrored
+    fixture flow green on Windows (Linux via CI).
+3.  **Rust** (`tui-lab-sdk` crate) — covers Ratatui/Cursive/Crossterm. DONE:
+    `tuilab/sdks/rust` workspace member (same surface in `Result`-based
+    async API, `tokio` integration tests), sidecar only — no core linking
+    per DECIDED (see `src/lib.rs` crate docs).
 4.  Later: Go, Java — only on demand; CLI already covers them.
 
 ## 9.3 Usage sketches
@@ -86,29 +87,34 @@ TypeScript:
 
 ```ts
 import { TuiTest } from "@tui-lab/sdk";
-const tui = await TuiTest.launch({ command: "./myapp" });
-await tui.expectText("Welcome");
-await tui.press("ENTER");
-await tui.type("/");
-await tui.type("table");
-await tui.press("ENTER");
-await tui.expectText("Search Results");
+const tui = await TuiTest.launch("./myapp");
+try {
+  await tui.expectText("Welcome");
+  await tui.press("ENTER");
+  await tui.type("/");
+  await tui.type("table");
+  await tui.press("ENTER");
+  await tui.expectText("Search Results");
+} finally {
+  await tui.close();
+}
 ```
 
 Rust:
 
 ```rust
-let tui = TuiTest::launch("./myapp").await?;
-tui.expect_text("Welcome").await?;
-tui.press(Key::Enter).await?;
+let mut tui = tui_lab_sdk::TuiTest::launch("./myapp", tui_lab_sdk::LaunchOptions::new()).await?;
+tui.expect_text("Welcome", 10_000, false).await?;
+tui.press("ENTER").await?;
+tui.close().await?;
 ```
 
 YAML remains canonical: `await runner.run("test.yaml")` must work from every SDK.
 
 ## 9.4 Packaging notes
 
-*   Python/JS SDKs ship as pure clients + JSON schema; they shell out to or import `tuilab` binary for execution (no native PTY code in SDK v1).
-*   Rust SDK may link `tui-lab-core` directly for in-process speed.
+*   Python/JS SDKs ship as pure clients + JSON schema; they shell out to the `tuilab` binary for execution (no native PTY code in SDK v1).
+*   Rust SDK likewise shells out (sidecar rule upheld over the §9.1 sketch's native-link option — overturning needs a grill round).
 *   All SDKs pin `schema: tui-lab/v1` and surface the same error/failure-bundle shape as CLI/MCP.
 
 ## 9.5 Future (Phase 6): optional instrumented metadata
