@@ -1441,6 +1441,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "tui-lab-terminal",
 ]
 
 [[package]]

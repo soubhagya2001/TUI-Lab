@@ -32,6 +32,8 @@ pub struct LiveSession {
 pub struct ClosedSession {
     /// True when the child exited on its own with success.
     pub exited_cleanly: bool,
+    /// Numeric exit code as reported (1 on signal deaths per PTY convention).
+    pub exit_code: u32,
     /// Termination signal name, if reported.
     pub signal: Option<String>,
     /// Kill-path evidence: pump counters when the grace expired first.
@@ -53,6 +55,7 @@ impl std::fmt::Debug for ClosedSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClosedSession")
             .field("exited_cleanly", &self.exited_cleanly)
+            .field("exit_code", &self.exit_code)
             .field("signal", &self.signal)
             .field("note", &self.note)
             .finish()
@@ -171,6 +174,7 @@ impl SessionRegistry {
         };
         Ok(ClosedSession {
             exited_cleanly,
+            exit_code: status.exit_code(),
             signal,
             note,
         })

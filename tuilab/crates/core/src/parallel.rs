@@ -68,6 +68,7 @@ fn infra_failure(suite: String, error: &str) -> SuiteResult {
         passed: false,
         exit_success: None,
         exit_signal: None,
+        exit_code: None,
         duration_ms: 0,
         steps: Vec::new(),
         failure: Some(FailureInfo {

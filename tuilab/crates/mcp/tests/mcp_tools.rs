@@ -181,11 +181,29 @@ async fn mode_a_loop_against_fixture() {
     let screen = handler
         .tui_screen(Parameters(ScreenParams {
             session_id: id.clone(),
+            styled: true,
+        }))
+        .await
+        .expect("styled screen")
+        .0;
+    let cells = screen.cells.expect("cells present when styled");
+    assert!(!cells.is_empty());
+    let title: String = cells
+        .iter()
+        .filter(|cell| cell.y == 0)
+        .map(|cell| cell.char.as_str())
+        .collect();
+    assert!(title.contains("TUI-LAB-SAMPLE"), "{title}");
+
+    let screen = handler
+        .tui_screen(Parameters(ScreenParams {
+            session_id: id.clone(),
             styled: false,
         }))
         .await
         .expect("screen")
         .0;
+    assert!(screen.cells.is_none(), "cells omitted unless styled");
     assert!(screen.text.contains("Selected: beta-chair"));
     assert_eq!((screen.width, screen.height), (120, 40));
 

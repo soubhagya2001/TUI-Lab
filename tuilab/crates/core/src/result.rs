@@ -18,6 +18,10 @@ pub struct SuiteResult {
     pub exit_success: Option<bool>,
     /// Termination signal name, if reported (e.g. `SIGKILL`).
     pub exit_signal: Option<String>,
+    /// Numeric exit code, if the process ended. Absent in results written
+    /// before Phase 9c (back-compatible via default).
+    #[serde(default)]
+    pub exit_code: Option<i32>,
     /// Total run time in milliseconds.
     pub duration_ms: u64,
     /// Per-step outcomes, in execution order.

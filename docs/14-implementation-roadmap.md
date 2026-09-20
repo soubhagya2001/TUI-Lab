@@ -168,5 +168,11 @@ it, never a second implementation.
     green. Fixed en route: glued sequences kill streaming parsers (one
     write per event); ConPTY needs button-coded release (generic Cb=3
     never arrives) — both recorded in `12` §12.2.
-*   **Phase 9c — next.** `region:` masks, separate `stderr`, numeric exit
-    codes, per-cell `styled` screens.
+*   **Phase 9c — done (Windows-verified).** `region:` masks (rect/top/
+    bottom, blank-then-regex precedence), numeric exit codes end to end
+    (`SuiteResult` + MCP/proto, additive with back-compat test), styled
+    cells (`Emulator::cells` → goldens → `tui_screen styled`). Child
+    `stderr` separation recorded as decided-against on portable-pty 0.9
+    (no redirect API) rather than built fragile.
+*   **Phase 10 — next.** SDK fast-follows: JS/TS (`@tui-lab/sdk`) then Rust
+    (`tui-lab-sdk`), same sidecar contract, mirrored fixture flows + CI.

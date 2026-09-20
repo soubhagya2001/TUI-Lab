@@ -12,6 +12,7 @@ fn fixture_result() -> SuiteResult {
         passed: false,
         exit_success: Some(false),
         exit_signal: None,
+        exit_code: Some(1),
         duration_ms: 1500,
         steps: vec![
             StepResult {
@@ -133,4 +134,23 @@ fn html_passing_suite_marks_pass() {
     let html = to_html(&[result]);
     assert!(html.contains("PASS"));
     assert!(!html.contains("<pre>"));
+}
+
+#[test]
+fn pre_9c_results_without_exit_code_still_parse() {
+    // Additive wire rule: old results.json files (no exit_code field) load
+    // with None rather than failing strict deserialization.
+    let old = serde_json::json!({
+        "schema": "tui-lab/v1",
+        "suite": "legacy",
+        "passed": true,
+        "exit_success": true,
+        "exit_signal": null,
+        "duration_ms": 10,
+        "steps": [],
+        "failure": null,
+        "terminal": {"width": 80, "height": 24, "term": "xterm-256color"},
+    });
+    let result: SuiteResult = serde_json::from_value(old).expect("old shape parses");
+    assert_eq!(result.exit_code, None);
 }

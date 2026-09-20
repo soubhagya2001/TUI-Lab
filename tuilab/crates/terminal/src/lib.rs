@@ -8,4 +8,4 @@ pub mod emulator;
 pub mod error;
 pub mod utils;
 
-pub use emulator::{Emulator, ForwardingListener, PtySink};
+pub use emulator::{Emulator, ForwardingListener, PtySink, StyledCell};

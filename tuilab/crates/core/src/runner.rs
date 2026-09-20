@@ -192,21 +192,18 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         .close(None, opts.close_grace)
         .map_err(|e| CoreError::Pty(e.to_string()))?;
     let mut passed = failure.is_none();
+    let exit_code = status.exit_code() as i32;
     for assertion in &file.assertions {
         match assertion {
             SuiteAssertion::ExitCode(expected) => {
-                let ok = if *expected == 0 {
-                    status.success()
-                } else {
-                    !status.success()
-                };
+                let ok = exit_code == *expected;
                 if !ok {
                     passed = false;
                     failure = failure.or(Some(FailureInfo {
                         step_index: results.len(),
                         step: format!("assert exit_code {expected}"),
                         expected: format!("exit code {expected}"),
-                        actual: format!("exit success={}", status.success()),
+                        actual: format!("exit code {exit_code}"),
                         last_screen: emu.text(),
                         input_history: ctx.input_history.clone(),
                     }));
@@ -236,6 +233,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         passed,
         exit_success: Some(status.success()),
         exit_signal: status.signal().map(str::to_string),
+        exit_code: Some(exit_code),
         duration_ms: ctx.elapsed_ms(),
         steps: results,
         failure,

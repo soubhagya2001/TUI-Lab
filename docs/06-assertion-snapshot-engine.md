@@ -95,8 +95,13 @@ Volatile content (clock, CPU%, random IDs, spinners) must be maskable:
     name: dashboard
     mask:
       - regex: "\\d{2}:\\d{2}:\\d{2}"
-      - region: bottom_status
+      - region:bottom:3
 ```
+
+Two mask layers, applied in order: `region:` entries blank rectangular
+areas to spaces first (`region:rect:X,Y,W,H`, `region:top:N`,
+`region:bottom:N` — 0-based, clamped, positions stay stable), then regex
+entries replace volatile spans. Unknown `region:` names are errors.
 
 Also support: `ignore_ansi_style: true`, per-cell `ignore_fg/bg`, custom normalizers.
 

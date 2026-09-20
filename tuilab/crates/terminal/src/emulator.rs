@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions as _;
 use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::Term;
-use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
+use alacritty_terminal::vte::ansi::{Color, Processor, StdSyncHandler};
 
 use crate::utils::render_text;
 
@@ -43,6 +44,38 @@ impl EventListener for ForwardingListener {
                 let _ = sink.write_all(text.as_bytes());
             }
         }
+    }
+}
+
+/// One grid cell with style, grid-owned (docs/06 §6.2 render snapshot).
+///
+/// `tui-lab-snapshots` maps this onto its `CellData`; layers stay clean.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StyledCell {
+    /// Zero-based column.
+    pub x: usize,
+    /// Zero-based row.
+    pub y: usize,
+    /// Grapheme.
+    pub character: char,
+    /// Foreground (`black`, `brightred`, `#rrggbb`, `color{n}`, …).
+    pub fg: String,
+    /// Background, same encoding.
+    pub bg: String,
+    /// Bold flag.
+    pub bold: bool,
+    /// Any underline variant.
+    pub underline: bool,
+    /// Reverse video.
+    pub reverse: bool,
+}
+
+/// Deterministic color encoding for snapshots and assertions.
+fn color_name(color: &Color) -> String {
+    match color {
+        Color::Named(named) => format!("{named:?}").to_lowercase(),
+        Color::Spec(rgb) => format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b),
+        Color::Indexed(index) => format!("color{index}"),
     }
 }
 
@@ -89,6 +122,35 @@ impl Emulator {
     /// Visible `(cols, rows)`.
     pub fn dims(&self) -> (usize, usize) {
         (self.term.columns(), self.term.screen_lines())
+    }
+
+    /// Styled grid dump, row-major (excludes trailing blank padding per row
+    /// like [`Emulator::text`], so snapshots stay compact).
+    pub fn cells(&self) -> Vec<StyledCell> {
+        let grid = self.term.grid();
+        let mut out = Vec::new();
+        for row in 0..self.term.screen_lines() {
+            let mut last_content = 0;
+            for col in 0..self.term.columns() {
+                if grid[Line(row as i32)][Column(col)].c != ' ' {
+                    last_content = col + 1;
+                }
+            }
+            for col in 0..last_content {
+                let cell = &grid[Line(row as i32)][Column(col)];
+                out.push(StyledCell {
+                    x: col,
+                    y: row,
+                    character: cell.c,
+                    fg: color_name(&cell.fg),
+                    bg: color_name(&cell.bg),
+                    bold: cell.flags.contains(Flags::BOLD),
+                    underline: cell.flags.intersects(Flags::ALL_UNDERLINES),
+                    reverse: cell.flags.contains(Flags::INVERSE),
+                });
+            }
+        }
+        out
     }
 
     /// Resize the grid.

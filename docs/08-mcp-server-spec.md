@@ -23,19 +23,18 @@ to the transport. Scope is tools only — no prompts/resources.
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
 | `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
 | `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
-| `tui_close` | `{ session_id, quit? }` | `{ success, signal }` |
+| `tui_close` | `{ session_id, quit? }` | `{ success, exit_code, signal }` |
 
 Phase 4 field notes (deviations from early sketches, kept honest):
 
-Phase 4 field notes (deviations from early sketches, kept honest):
-
-*   `tui_close` returns `success` + `signal`: `portable-pty` reports
-    success/signal rather than numeric codes (numeric `exit_code` arrives
-    with a richer process API later). Pass `quit` (e.g. `"q"`) so close
-    polls for natural exit within the grace period and only then kills —
-    this removes the press-quit/close race on slow schedulers.
-*   `tui_screen { styled: true }` is accepted but per-cell detail is deferred
-    to v2; text + cursor + dims always return.
+*   `tui_close` returns `success` + `exit_code` + `signal` (numeric codes
+    landed in Phase 9c via `portable-pty` `exit_code()`; signal deaths read
+    code per PTY convention). Pass `quit` (e.g. `"q"`) so close polls for
+    natural exit within the grace period and only then kills — this removes
+    the press-quit/close race on slow schedulers.
+*   `tui_screen { styled: true }` returns the per-cell array (`x/y/char/
+    fg/bg/bold/underline/reverse`, deterministic color encoding); text +
+    cursor + dims always return.
 *   `tui_snapshot` returns `{ saved: true }` when it writes a new golden,
     `{ saved: false, diff }` when it compares.
 *   Allowlist patterns are regexes: `^\./.*`, `^cargo run.*`, `^python.*`

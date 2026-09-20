@@ -94,3 +94,27 @@ fn resize_changes_dims_and_keeps_content_readable() {
     assert_eq!(emu.dims(), (80, 24));
     assert!(emu.text().contains("Hello"));
 }
+
+#[test]
+fn cells_carry_style_through_feed_and_read() {
+    let (mut emu, _) = harness(80, 24);
+    emu.feed(b"\x1b[31mR\x1b[0m\x1b[1mB\x1b[0mP");
+    let cells = emu.cells();
+    assert_eq!(cells.len(), 3);
+    assert_eq!(cells[0].character, 'R');
+    assert_eq!(cells[0].fg, "red");
+    assert!(!cells[0].bold);
+    assert_eq!(cells[1].character, 'B');
+    assert!(cells[1].bold);
+    assert_eq!(cells[2].character, 'P');
+    assert!(!cells[2].bold);
+}
+
+#[test]
+fn cells_skip_trailing_padding() {
+    let (mut emu, _) = harness(80, 24);
+    emu.feed(b"Hi");
+    let cells = emu.cells();
+    assert_eq!(cells.len(), 2);
+    assert!(cells.iter().all(|cell| cell.y == 0));
+}

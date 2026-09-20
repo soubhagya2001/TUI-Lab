@@ -201,12 +201,29 @@ impl TuiLabHandler {
         let text = SessionRegistry::pump_once(session, Duration::from_millis(100));
         let (width, height) = session.emu.dims();
         let (row, col) = session.emu.cursor();
-        let _ = params.styled; // Per-cell detail arrives in v2; text rules v1.
+        let cells = params.styled.then(|| {
+            session
+                .emu
+                .cells()
+                .into_iter()
+                .map(|cell| crate::tools::ScreenCell {
+                    x: cell.x,
+                    y: cell.y,
+                    char: cell.character.to_string(),
+                    fg: cell.fg,
+                    bg: cell.bg,
+                    bold: cell.bold,
+                    underline: cell.underline,
+                    reverse: cell.reverse,
+                })
+                .collect()
+        });
         Ok(Json(ScreenOut {
             width,
             height,
             cursor: CursorPos { row, col },
             text,
+            cells,
         }))
     }
 
@@ -385,6 +402,7 @@ impl TuiLabHandler {
             .map_err(|e| tool_error("close", e))?;
         Ok(Json(CloseOut {
             success: closed.exited_cleanly,
+            exit_code: closed.exit_code,
             signal: closed.signal,
             detail: closed.note,
         }))

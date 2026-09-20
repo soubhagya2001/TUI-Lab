@@ -125,6 +125,30 @@ pub struct ScreenOut {
     pub cursor: CursorPos,
     /// Plain-text grid.
     pub text: String,
+    /// Styled cells, only when `styled: true` was requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cells: Option<Vec<ScreenCell>>,
+}
+
+/// One styled cell in `tui_screen` output.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ScreenCell {
+    /// Zero-based column.
+    pub x: usize,
+    /// Zero-based row.
+    pub y: usize,
+    /// Grapheme.
+    pub char: String,
+    /// Foreground (`black`, `#rrggbb`, `color{n}`, …).
+    pub fg: String,
+    /// Background, same encoding.
+    pub bg: String,
+    /// Bold flag.
+    pub bold: bool,
+    /// Underline flag.
+    pub underline: bool,
+    /// Reverse-video flag.
+    pub reverse: bool,
 }
 
 /// `tui_wait_for_text` input.
@@ -259,13 +283,12 @@ pub struct CloseParams {
 }
 
 /// `tui_close` output.
-///
-/// Note: `portable-pty` reports success/signal rather than numeric codes;
-/// numeric `exit_code` arrives with a richer process API later.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct CloseOut {
     /// Child exited on its own with success.
     pub success: bool,
+    /// Numeric exit code as reported.
+    pub exit_code: u32,
     /// Termination signal, if reported.
     pub signal: Option<String>,
     /// Kill-path evidence (pump counters), if the grace expired first.

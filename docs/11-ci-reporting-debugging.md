@@ -26,9 +26,12 @@ reports stay diffable run-over-run.
 
 ## 11.3 Failure bundle (capture on every failure)
 
-Phase 3 implements the core subset; `stderr` tail separation and env
-redaction beyond `sensitive` typing arrive in v2 (child stderr currently
-shares the PTY stream — see `12` §12.2).
+Phase 3 implements the core subset; env redaction beyond `sensitive`
+typing is future work. Child `stderr` shares the PTY stream: `portable-pty`
+0.9 exposes no stderr redirect (verified in vendored source — stdio is
+hardwired to the slave), and per-OS shell-wrapper redirection was rejected
+as fragile, so the separate-pipe item stays open pending a PTY upgrade
+(decided Phase 9c, not deferred by neglect).
 
 1.  test step number + action
 2.  expected screen/text

@@ -276,6 +276,7 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             Ok(closed) => serde_json::json!({
                 "ok": true,
                 "success": closed.exited_cleanly,
+                "exit_code": closed.exit_code,
                 "signal": closed.signal,
                 "detail": closed.note,
             })

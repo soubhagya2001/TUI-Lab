@@ -30,8 +30,9 @@ TUI Lab App
 *   Working directory: ConPTY children do not inherit the parent CWD unless
     set explicitly (they land in the profile dir). `tui-lab-pty` defaults
     unset `cwd` to the current process directory.
-*   Child `stderr` shares the PTY stream by default (portable-pty inherits
-    stdio); a separate stderr pipe for clean failure bundles is v2 work.
+*   Child `stderr` shares the PTY stream: `portable-pty` 0.9 exposes no
+    redirect API (verified — `CommandBuilder` hardwires stdio to the
+    slave). Revisit on upgrade; shell-wrapper workarounds rejected.
 *   Kill semantics differ: `portable-pty` 0.9 `kill()` sends SIGHUP first on
     Unix (escalating to SIGKILL), versus TerminateProcess on Windows. A
     kill-path `close()` therefore reports signal `Hangup`, not `SIGKILL` —
