@@ -1244,8 +1244,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
 dependencies = [
  "bytes",
+ "libc",
+ "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "tokio-macros",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1431,6 +1435,15 @@ name = "tui-lab-runtime"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "tokio",
+]
+
+[[package]]
+name = "tui-lab-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
