@@ -31,6 +31,7 @@ fully audited against it — every section is captured in `docs/01`–`docs/14`.
 | 12 | [12-cross-platform-strategy.md](./docs/12-cross-platform-strategy.md) | Unix PTY vs Windows ConPTY, encoding/resize pitfalls |
 | 13 | [13-feasibility-risks.md](./docs/13-feasibility-risks.md) | Feasibility table, 4 hard problems, mitigations |
 | 14 | [14-implementation-roadmap.md](./docs/14-implementation-roadmap.md) | Language choice, repo layout, Phase 1-6, MVP v1/v2/v3 |
+| 15 | [15-web-guide-plan.md](./docs/15-web-guide-plan.md) | `web-guide/` React docs site plan (stack, pages, deploy) |
 
 ## Design principles (read first)
 

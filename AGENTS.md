@@ -42,6 +42,7 @@ complete (dual-OS green), implementation per `docs/14-implementation-roadmap.md`
 | `domain-cli` | `tuilab` CLI patterns |
 | `tui-design` | Sample apps, TUI pattern questions |
 | `grill-me` | Sharpen a plan before implementing it |
+| `shadcn` | `web-guide/` component work (search/add/compose rules) |
 
 ## 5. Repo layout (target, see `docs/14-implementation-roadmap.md` §14.2)
 

@@ -22,6 +22,8 @@ tuilab/sdks/python/uv.lock
 tuilab/sdks/python/tests/snapshots/
 tuilab/sdks/javascript/dist/
 tuilab/sdks/javascript/node_modules/
+web-guide/dist/
+web-guide/node_modules/
 .venv/
 .pytest_cache/
 __pycache__/
