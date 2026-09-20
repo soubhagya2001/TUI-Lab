@@ -1,8 +1,7 @@
 //! Key and text encoding to terminal bytes (docs/03 §3.3).
 //!
-//! Named keys follow xterm sequences. Mouse sequences are explicitly
-//! deferred to v2 (see docs/14 §14.4) — requesting one is an error, not
-//! silent garbage.
+//! Named keys follow xterm sequences; mouse actions follow SGR (see
+//! [`crate::mouse`]). Unknown names are an error, not silent garbage.
 
 use crate::constants::{
     KEY_BACKTAB, KEY_DELETE, KEY_DOWN, KEY_END, KEY_ENTER, KEY_ESCAPE, KEY_HOME, KEY_INSERT,
@@ -25,6 +24,9 @@ pub fn encode_key(name: &str) -> Result<Vec<u8>> {
     if normalized.starts_with("ALT+") {
         // Preserve the original case (`ALT+x` != `ALT+X`).
         return alt(&name["ALT+".len()..]);
+    }
+    if let Some(result) = mouse(&normalized) {
+        return result;
     }
     let mut chars = name.chars();
     match (chars.next(), chars.next()) {
@@ -89,4 +91,54 @@ fn alt(rest: &str) -> Result<Vec<u8>> {
     }
     bytes.extend_from_slice(rest.as_bytes());
     Ok(bytes)
+}
+
+/// Mouse actions: `CLICK x y`, `RIGHT_CLICK x y`, `SCROLL_UP x y`,
+/// `SCROLL_DOWN x y`, `RELEASE x y` (1-based cells). `None` means "not
+/// a mouse name" so others fall through.
+///
+/// There is deliberately no single-blob `DRAG`: streaming parsers
+/// (crossterm included) reject glued escape sequences, so gestures are
+/// press + `RELEASE` as separate steps — exactly how real event streams
+/// arrive. See `mouse_drag` for the byte shapes this composes.
+fn mouse(normalized: &str) -> Option<Result<Vec<u8>>> {
+    use crate::mouse::{
+        mouse_press, mouse_release, mouse_scroll_down, mouse_scroll_up, MouseButton,
+    };
+    let mut parts = normalized.split_whitespace();
+    let kind = parts.next()?;
+    let rest: Vec<&str> = parts.collect();
+    let mut coords = Vec::with_capacity(rest.len());
+    for part in &rest {
+        match part.parse::<u16>() {
+            Ok(value) => coords.push(value),
+            Err(_) => {
+                return match kind {
+                    "CLICK" | "RIGHT_CLICK" | "MIDDLE_CLICK" | "RELEASE" | "SCROLL_UP"
+                    | "SCROLL_DOWN" | "DRAG" => Some(Err(InputError::UnknownKey(format!(
+                        "{normalized}: coordinates must be integers"
+                    )))),
+                    _ => None,
+                };
+            }
+        }
+    }
+    let at = |index: usize| coords.get(index).copied().unwrap_or(0);
+    let shape = |want: &str| InputError::UnknownKey(format!("{normalized}: expected {want}"));
+    let bytes = match (kind, coords.len()) {
+        ("CLICK", 2) => mouse_press(MouseButton::Left, at(0), at(1)),
+        ("RIGHT_CLICK", 2) => mouse_press(MouseButton::Right, at(0), at(1)),
+        ("MIDDLE_CLICK", 2) => mouse_press(MouseButton::Middle, at(0), at(1)),
+        // Left release: the overwhelmingly common gesture end. Button-coded
+        // (not generic Cb=3) because ConPTY only translates button-coded
+        // releases into input records (see mouse.rs).
+        ("RELEASE", 2) => mouse_release(MouseButton::Left, at(0), at(1)),
+        ("SCROLL_UP", 2) => mouse_scroll_up(at(0), at(1)),
+        ("SCROLL_DOWN", 2) => mouse_scroll_down(at(0), at(1)),
+        ("CLICK" | "RIGHT_CLICK" | "MIDDLE_CLICK" | "RELEASE" | "SCROLL_UP" | "SCROLL_DOWN", _) => {
+            return Some(Err(shape("2 coordinates: e.g. CLICK 10 5")));
+        }
+        _ => return None,
+    };
+    Some(Ok(bytes))
 }

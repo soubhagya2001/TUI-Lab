@@ -65,6 +65,7 @@ assertions:
 |------|-------|-------|
 | `launch` | `{ command, args?, cwd?, env? }` | Usually implicit from `application:` |
 | `press` | `"ENTER" \| "DOWN" \| "CTRL+C" \| "q"` | Named keys + literals |
+| `press` (mouse) | `"CLICK x y" \| "RELEASE x y" \| "SCROLL_UP/DOWN x y"` | 1-based cells; gestures as separate steps (see `03` §3.3) |
 | `type` | `"search text"` | Verbatim typing |
 | `wait_for_text` | `{ text, timeout?, regex? }` | Polling wait — always prefer over `sleep` |
 | `sleep` | `"500ms"` | Escape hatch only (flaky, discouraged) |

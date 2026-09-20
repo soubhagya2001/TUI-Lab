@@ -1,15 +1,19 @@
-//! Minimal deterministic TUI fixture for TUI Lab Phase 1.
+//! Minimal deterministic TUI fixture for TUI Lab (Phase 1 + 9b).
 //!
 //! Screens (static strings, no clocks — snapshot-safe):
 //! * list:   title `TUI-LAB-SAMPLE`, footer hints
 //! * search: `/` opens `Search: <query>`, live filter
 //! * detail: `ENTER` shows `Selected: <item>`
-//! Quit with `q` (exit 0). `ESC` in search returns to the list.
+//! Mouse capture is always on; the footer shows the last mouse event
+//! (`Mouse: -` initially). Quit with `q` (exit 0). `ESC` in search returns
+//! to the list.
 
 use std::io::{self, Stdout};
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -39,6 +43,8 @@ struct App {
     mode: Mode,
     query: String,
     state: ListState,
+    /// Last mouse event readout (`Mouse: -` until the first one).
+    mouse: String,
 }
 
 impl App {
@@ -49,6 +55,7 @@ impl App {
             mode: Mode::List,
             query: String::new(),
             state,
+            mouse: "Mouse: -".to_string(),
         }
     }
 
@@ -91,7 +98,7 @@ impl App {
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -99,7 +106,11 @@ fn main() -> io::Result<()> {
     let exit = run(&mut terminal, &mut app);
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
     exit
 }
@@ -114,58 +125,76 @@ fn run(
         if !event::poll(Duration::from_millis(100))? {
             continue;
         }
-        let Event::Key(key) = event::read()? else {
-            continue;
-        };
-        // ConPTY delivers press AND release records; react to presses only,
-        // or every key would act twice.
-        if key.kind != KeyEventKind::Press {
-            continue;
-        }
-
-        match app.mode {
-            Mode::List => match key.code {
-                KeyCode::Char('q') => return Ok(()),
-                KeyCode::Char('/') => app.mode = Mode::Search,
-                KeyCode::Down | KeyCode::Char('j') => app.move_down(),
-                KeyCode::Up | KeyCode::Char('k') => app.move_up(),
-                KeyCode::Enter => {
-                    if app.selected_item().is_some() {
-                        app.mode = Mode::Detail;
-                    }
+        match event::read()? {
+            // Mouse capture is always on; record the last event for tests.
+            // No selection changes in v1 — readout only.
+            Event::Mouse(mouse) => {
+                app.mouse = format!(
+                    "Mouse: {:?} {},{}",
+                    mouse.kind, mouse.column, mouse.row
+                );
+                continue;
+            }
+            Event::Key(key) => {
+                // ConPTY delivers press AND release records; react to presses
+                // only, or every key would act twice.
+                if key.kind != KeyEventKind::Press {
+                    continue;
                 }
-                _ => {}
-            },
-            Mode::Search => match key.code {
-                KeyCode::Esc => {
-                    app.mode = Mode::List;
-                    app.query.clear();
-                    app.state.select(Some(0));
+                if !handle_key(app, key.code) {
+                    return Ok(());
                 }
-                KeyCode::Enter => {
-                    if app.selected_item().is_some() {
-                        app.mode = Mode::Detail;
-                    }
-                }
-                KeyCode::Backspace => {
-                    app.query.pop();
-                    app.state.select(Some(0));
-                }
-                KeyCode::Char(c) => {
-                    app.query.push(c);
-                    app.state.select(Some(0));
-                }
-                KeyCode::Down => app.move_down(),
-                KeyCode::Up => app.move_up(),
-                _ => {}
-            },
-            Mode::Detail => match key.code {
-                KeyCode::Char('q') => return Ok(()),
-                KeyCode::Esc => app.mode = Mode::List,
-                _ => {}
-            },
+            }
+            _ => continue,
         }
     }
+}
+
+/// Handle one keypress. Returns false when the app should quit.
+fn handle_key(app: &mut App, code: KeyCode) -> bool {
+    match app.mode {
+        Mode::List => match code {
+            KeyCode::Char('q') => return false,
+            KeyCode::Char('/') => app.mode = Mode::Search,
+            KeyCode::Down | KeyCode::Char('j') => app.move_down(),
+            KeyCode::Up | KeyCode::Char('k') => app.move_up(),
+            KeyCode::Enter => {
+                if app.selected_item().is_some() {
+                    app.mode = Mode::Detail;
+                }
+            }
+            _ => {}
+        },
+        Mode::Search => match code {
+            KeyCode::Esc => {
+                app.mode = Mode::List;
+                app.query.clear();
+                app.state.select(Some(0));
+            }
+            KeyCode::Enter => {
+                if app.selected_item().is_some() {
+                    app.mode = Mode::Detail;
+                }
+            }
+            KeyCode::Backspace => {
+                app.query.pop();
+                app.state.select(Some(0));
+            }
+            KeyCode::Char(c) => {
+                app.query.push(c);
+                app.state.select(Some(0));
+            }
+            KeyCode::Down => app.move_down(),
+            KeyCode::Up => app.move_up(),
+            _ => {}
+        },
+        Mode::Detail => match code {
+            KeyCode::Char('q') => return false,
+            KeyCode::Esc => app.mode = Mode::List,
+            _ => {}
+        },
+    }
+    true
 }
 
 fn ui(frame: &mut ratatui::Frame<'_>, app: &mut App) {
@@ -196,6 +225,7 @@ fn ui(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         Mode::List => "j/k or arrows move, / search, ENTER select, q quit".to_string(),
         Mode::Detail => "ESC back, q quit".to_string(),
     };
+    let footer = format!("{footer} | {}", app.mouse);
     let help =
         Paragraph::new(footer).block(Block::default().borders(Borders::ALL).title("Help"));
     frame.render_widget(help, chunks[1]);

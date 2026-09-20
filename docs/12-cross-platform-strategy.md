@@ -39,6 +39,20 @@ TUI Lab App
 *   Key press AND release records: ConPTY delivers both, so apps (and the
     Phase 1 fixture) must filter on press events or every key acts twice —
     caught by the `runtime_smoke` test in Phase 1.
+*   Mouse input, three ConPTY rules (proven live in Phase 9b — each cost a
+    debugging cycle, recorded here so nobody re-pays them):
+    1.  One write per input event. Glued escape sequences
+        (`press+release` in a single write) are rejected by streaming
+        parsers — the app died on the spot. Gestures always travel as
+        distinct steps, exactly like real event streams.
+    2.  Button-coded release only. ConPTY does not translate the generic
+        SGR release (`ESC[<3;x;ym`) into a console input record — the
+        event never arrives (app alive, pump clean, zero bytes). Release
+        as `ESC[<<button>;x;ym` (e.g. `ESC[<0;30;2m` for left) works on
+        ConPTY and parses on raw PTYs, so `RELEASE x y` means left.
+    3.  No duplicate presses without release. Crossterm's Windows backend
+        edge-detects on button state, so a second press while held produces
+        no event — again exactly like physical hardware.
 
 ## 12.3 Mitigations
 

@@ -162,3 +162,11 @@ it, never a second implementation.
     (`report --format html`, offline-capable) and the `--step` runner
     (per-step hook in core, CLI pause with Enter/q, sequential forcing,
     headless-safe on closed stdin).
+*   **Phase 9b — done (Windows-verified).** SGR mouse encoder (`CLICK`,
+    `RELEASE`, scroll names through `press`, 1-based coords) + always-on
+    fixture capture with status readout + live click/scroll/release loop
+    green. Fixed en route: glued sequences kill streaming parsers (one
+    write per event); ConPTY needs button-coded release (generic Cb=3
+    never arrives) — both recorded in `12` §12.2.
+*   **Phase 9c — next.** `region:` masks, separate `stderr`, numeric exit
+    codes, per-cell `styled` screens.

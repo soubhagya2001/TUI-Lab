@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use tui_lab_core::{StepHook, run_file, RunOptions};
+use tui_lab_core::{run_file, RunOptions, StepHook};
 use tui_lab_protocol::TestFile;
 
 /// Build the fixture binary on demand; return its path.
