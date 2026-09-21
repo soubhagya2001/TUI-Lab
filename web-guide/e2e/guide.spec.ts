@@ -69,6 +69,20 @@ test.describe('Guide site', () => {
     expect(errors).toEqual([])
   })
 
+  test('chapter cards have vertical rhythm', async ({ page }) => {
+    await page.goto('./#/getting-started')
+    const cards = page.locator('.chapter-body > *')
+    const count = await cards.count()
+    expect(count).toBeGreaterThan(2)
+    let previousBottom = -Infinity
+    for (let i = 0; i < count; i++) {
+      const box = await cards.nth(i).boundingBox()
+      if (!box || box.height === 0) continue
+      expect(box.y, `card ${i} overlaps the previous block`).toBeGreaterThan(previousBottom + 8)
+      previousBottom = box.y + box.height
+    }
+  })
+
   test('footer shows contact links', async ({ page }) => {
     await page.goto('./')
     const footer = page.locator('footer')

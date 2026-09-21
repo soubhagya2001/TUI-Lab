@@ -190,7 +190,7 @@ export function Layout() {
         </aside>
         <main className="min-w-0 flex-1 py-6">
           {current && pathname !== '/' && (
-            <Breadcrumb className="mb-4">
+            <Breadcrumb className="mb-6">
               <BreadcrumbList>
                 <BreadcrumbItem>
                   <BreadcrumbLink asChild>
@@ -204,7 +204,12 @@ export function Layout() {
               </BreadcrumbList>
             </Breadcrumb>
           )}
-          <Outlet />
+          {/* Chapter body: MDX top-level nodes become direct DOM children
+              (fragments render no wrapper), so the flex gap here guarantees
+              rhythm even if the MDX `wrapper` mapping is bypassed. */}
+          <div className="chapter-body flex flex-col gap-6">
+            <Outlet />
+          </div>
           <Separator className="mt-12" />
           <PrevNext />
         </main>

@@ -17,8 +17,8 @@ export function Callout({ title, children, tone = 'info', className }: CalloutPr
     <Alert
       className={cn(
         tone === 'warning'
-          ? 'border-warning/50 bg-warning text-warning-foreground'
-          : 'border-info/50 bg-info text-info-foreground',
+          ? 'border-warning/40 bg-warning/10 text-foreground'
+          : 'border-info/40 bg-info/10 text-foreground',
         className,
       )}
     >
