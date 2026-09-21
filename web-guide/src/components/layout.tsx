@@ -1,4 +1,4 @@
-import { MenuIcon, MoonIcon, SearchIcon, SquareTerminalIcon, SunIcon } from 'lucide-react'
+import { MailIcon, MenuIcon, MoonIcon, SearchIcon, SquareTerminalIcon, SunIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
@@ -121,10 +121,22 @@ function PrevNext() {
       ) : (
         <span />
       )}
-      {next && (
+      {next ? (
+        <span className="hidden text-center text-sm text-muted-foreground sm:block">
+          Up next:{' '}
+          <Link to={next.path} className="font-medium text-primary underline underline-offset-4">
+            {next.title}
+          </Link>
+        </span>
+      ) : (
+        <span />
+      )}
+      {next ? (
         <Button asChild>
           <Link to={next.path}>{next.title} →</Link>
         </Button>
+      ) : (
+        <span />
       )}
     </div>
   )
@@ -195,24 +207,39 @@ export function Layout() {
           <Outlet />
           <Separator className="mt-12" />
           <PrevNext />
-          {current && current.sources.length > 0 && (
-            <p className="mt-6 text-xs text-muted-foreground">
-              Distilled from: {current.sources.join(', ')} in the TUI Lab repo.
-            </p>
-          )}
         </main>
       </div>
       <footer className="border-t">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-1 px-6 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>TUI Lab developer guide — black-box testing for terminal apps.</span>
-          <a
-            className="text-primary underline underline-offset-4"
-            href="https://github.com/soubhagya2001/TUI-Lab"
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub repository
-          </a>
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-6 py-8 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">TUI Lab developer guide</span>
+            <span>Black-box testing for terminal apps.</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-semibold">Contact us</span>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <a href="mailto:soubhagyaprusty36@gmail.com">
+                  <MailIcon data-icon="inline-start" />
+                  Email
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href="https://linkedin.com/in/soubhagya-prusty-5424811b6"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  LinkedIn
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href="https://github.com/soubhagya2001" target="_blank" rel="noreferrer">
+                  GitHub
+                </a>
+              </Button>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

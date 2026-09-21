@@ -1,38 +1,89 @@
-import { Callout } from '../components/callout-code-tabs';
+import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
+import { StepBlock, StepDescription } from '../components/step-block';
 
 # MCP & AI agents
 
-`tuilab-mcp` exposes the engine to AI agents over the Model Context Protocol: nine small, powerful tools.
+`tuilab-mcp` plugs the engine into any AI assistant that speaks the Model Context Protocol. Your agent launches terminal apps, presses keys, reads screens, and runs whole suites — while you watch.
 
-## Tool list
+<StepBlock step={1} title="Install the engine">
 
-| Tool | Input | Output |
-|------|-------|--------|
-| `tui_launch` | `{ command, args?, cwd?, width?, height?, env? }` | `{ session_id, status, screen }` |
-| `tui_press` | `{ session_id, key }` | `{ ok, screen_changed }` |
-| `tui_type` | `{ session_id, text }` | `{ ok }` |
-| `tui_screen` | `{ session_id, style? }` | `{ width, height, cursor, text, cells? }` |
-| `tui_wait_for_text` | `{ session_id, text, timeout_ms?, regex? }` | `{ found, elapsed_ms, screen }` |
-| `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
-| `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
-| `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
-| `tui_close` | `{ session_id, quit? }` | `{ success, exit_code, signal }` |
+<StepDescription>The MCP server ships with every installer — `pip install tui-lab` or `npx @tui-lab/cli` both put `tuilab-mcp` on PATH. Verify:</StepDescription>
 
-`tui_close` returns `success` + numeric `exit_code` + `signal`. `tui_screen { styled: true }` returns the per-cell array. `tui_snapshot` returns `{ saved: true }` when it writes a new golden.
+```bash
+tuilab-mcp --help
+```
 
-## Mode A — interactive agent testing
+</StepBlock>
 
-The agent launches a session and pokes at the app itself: press keys, read screens, wait for text — exploratory testing with a live terminal.
+<StepBlock step={2} title="Connect your assistant" tag="one-time setup">
 
-## Mode B — automated execution
+<StepDescription>Register `tuilab-mcp` as a stdio MCP server. Pick your tab:</StepDescription>
 
-The agent runs whole suites via `tui_run_test` and triages the structured failures. Best for automated agent loops.
+<CodeTabs tabs={[
+  {
+    label: 'Claude Code', value: 'claude', content:
+    <pre><code>{`claude mcp add tuilab -- tuilab-mcp`}</code></pre>,
+  },
+  {
+    label: 'Cursor', value: 'cursor', content:
+    <pre><code>{`// .cursor/mcp.json
+{
+  "mcpServers": {
+    "tuilab": { "command": "tuilab-mcp" }
+  }
+}`}</code></pre>,
+  },
+  {
+    label: 'VS Code', value: 'vscode', content:
+    <pre><code>{`// .vscode/mcp.json
+{
+  "servers": {
+    "tuilab": { "command": "tuilab-mcp" }
+  }
+}`}</code></pre>,
+  },
+  {
+    label: 'Windsurf', value: 'windsurf', content:
+    <pre><code>{`// ~/.codeium/windsurf/mcp_config.json
+{
+  "mcpServers": {
+    "tuilab": { "command": "tuilab-mcp" }
+  }
+}`}</code></pre>,
+  },
+  {
+    label: 'Any MCP client', value: 'generic', content:
+    <pre><code>{`{
+  "mcpServers": {
+    "tuilab": {
+      "command": "/absolute/path/to/tuilab-mcp"
+    }
+  }
+}`}</code></pre>,
+  },
+]} />
 
-## Session & safety rules
+<Callout title="Not on PATH?">If your assistant can't find the server, use the absolute path (last tab). Find it with `which tuilab-mcp` on macOS/Linux or `where tuilab-mcp` on Windows.</Callout>
 
-<Callout title="Allowlist + cwd jail">`tui_launch` only runs commands matching `security.allow_commands` in `tuilab.yaml`, and `cwd` must resolve under the project root. `tui_type { sensitive: true }` redacts from logs. Max 8 concurrent sessions, 60s idle kill.</Callout>
+</StepBlock>
 
-## Next
+<StepBlock step={3} title="Ask your agent to test" tag="first session">
 
-- **SDKs** — programmatic access without the agent loop.
-- **Troubleshooting** — failure bundles agents can read too.
+<StepDescription>Try a prompt like this and watch the agent drive your app:</StepDescription>
+
+<Example title="First agent-driven test" description="Paste into your assistant after connecting the server.">
+
+```text
+Launch ./myapp with TUI Lab, wait for the main menu,
+select the second item, and tell me what the screen shows.
+Then close the session.
+```
+
+</Example>
+
+The agent will launch a session, synchronize on screen text (never fixed sleeps), report what it sees, and close up — or run a whole `tests/` suite file and triage the failures for you.
+
+</StepBlock>
+
+<Callout title="Safety rails">The server only runs commands listed in `security.allow_commands` in `tuilab.yaml`, and only inside your project folder. Passwords typed with the sensitive flag never reach logs. Sessions are capped at 8 concurrent with a 60s idle kill.</Callout>

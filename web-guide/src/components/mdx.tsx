@@ -10,17 +10,17 @@ function H2(props: ComponentProps<'h2'>) {
   return (
     <h2
       {...props}
-      className="mb-3 mt-10 scroll-mt-24 border-b pb-2 text-2xl font-semibold tracking-tight text-foreground"
+      className="mb-0 mt-4 scroll-mt-24 border-b pb-2 text-2xl font-semibold tracking-tight text-foreground"
     />
   )
 }
 
 function H3(props: ComponentProps<'h3'>) {
-  return <h3 {...props} className="mb-2 mt-6 text-lg font-semibold text-foreground" />
+  return <h3 {...props} className="mb-0 mt-2 text-lg font-semibold text-foreground" />
 }
 
 function P(props: ComponentProps<'p'>) {
-  return <p {...props} className="my-3 leading-7 text-foreground/90 [&_a]:text-primary [&_a]:underline" />
+  return <p {...props} className="my-0 leading-7 text-foreground/90 [&_a]:text-primary [&_a]:underline" />
 }
 
 function A(props: ComponentProps<'a'>) {
@@ -28,11 +28,11 @@ function A(props: ComponentProps<'a'>) {
 }
 
 function Ul(props: ComponentProps<'ul'>) {
-  return <ul {...props} className="my-3 flex list-disc flex-col gap-1.5 pl-6 marker:text-primary" />
+  return <ul {...props} className="my-0 flex list-disc flex-col gap-1.5 pl-6 marker:text-primary" />
 }
 
 function Ol(props: ComponentProps<'ol'>) {
-  return <ol {...props} className="my-3 flex list-decimal flex-col gap-1.5 pl-6 marker:text-primary" />
+  return <ol {...props} className="my-0 flex list-decimal flex-col gap-1.5 pl-6 marker:text-primary" />
 }
 
 function Li(props: ComponentProps<'li'>) {
@@ -64,7 +64,7 @@ function Blockquote(props: ComponentProps<'blockquote'>) {
   return (
     <blockquote
       {...props}
-      className="my-4 border-l-4 border-primary/60 bg-muted/40 py-1 pl-4 pr-2 italic text-foreground/90"
+      className="my-0 border-l-4 border-primary/60 bg-muted/40 py-1 pl-4 pr-2 italic text-foreground/90"
     />
   )
 }
@@ -86,7 +86,7 @@ export const mdxComponents = {
   td: Td,
   blockquote: Blockquote,
   wrapper: ({ children, ...props }: ComponentProps<'div'>) => (
-    <div {...props} className={cn('mdx-content')}>
+    <div {...props} className={cn('flex flex-col gap-6')}>
       {children}
     </div>
   ),

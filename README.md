@@ -1,21 +1,39 @@
-# TUI Lab — Documentation Index
+# TUI Lab — Playwright for Terminal Applications
 
-> **Mission:** TUI Lab is a language-agnostic, black-box testing platform for terminal applications. It provides a universal protocol, virtual terminal runtime, CLI, MCP server, and SDKs so developers and AI agents can launch, interact with, inspect, and validate any terminal application.
+> Language-agnostic, black-box testing for terminal apps. Launch any TUI in a
+> real terminal, drive it with keys and text, and assert what the screen shows —
+> from YAML suites, Python/JS/Rust SDKs, or your AI assistant. No app changes required.
 
-Distilled from the `TUI Testing System Design` ChatGPT thread (17 Sep 2026) and
-fully audited against it — every section is captured in `docs/01`–`docs/14`.
+**Guide:** https://soubhagya2001.github.io/TUI-Lab/ ·
+**Releases:** https://github.com/soubhagya2001/TUI-Lab/releases ·
+**License:** MIT OR Apache-2.0
+
+## Why TUI Lab
+
+Terminal apps are hard to test: they paint grids of characters, react to raw
+key bytes, and behave differently on Windows (ConPTY) vs Unix (PTY). TUI Lab
+gives them the Playwright treatment — a real terminal runtime plus a small,
+stable protocol on top:
+
+*   **Test anything** — Ratatui, Textual, Bubble Tea, Ink, plain shell scripts.
+    If it runs in a terminal, TUI Lab can drive it.
+*   **No instrumentation** — black-box at the byte level. Ship the same binary
+    you test.
+*   **Sync via waits, not sleeps** — every step polls with timeout + retry, so
+    suites are fast locally and stable on slow machines.
+*   **Deterministic snapshots** — mask clocks, PIDs, and IDs out of goldens.
+*   **Record, don't hand-write** — `tuilab record` turns a live session into a
+    suite with smart waits synthesized for you.
+*   **Agents welcome** — a Model Context Protocol server lets AI assistants
+    explore your app and triage failures.
 
 ## Install
 
-One-liners (each bundles the prebuilt engine — no manual binary setup):
-
 ```bash
-pip install tui-lab          # Python — tuilab + tuilab-mcp land on PATH
-uv add tui-lab               # uv project, same wheel
-uvx tui-lab run tests/e2e    # uv one-shot, no install
-npx @tui-lab/cli run tests/e2e   # Node — no install
-npm i @tui-lab/sdk           # TypeScript SDK (pulls the engine along)
-cargo install tui-lab-cli tui-lab-mcp  # Rust — builds from crates.io
+pip install tui-lab            # Python — tuilab + tuilab-mcp land on PATH
+uv add tui-lab                 # same wheel, uv project
+npx @tui-lab/cli run tests     # Node — no install needed
+cargo install tui-lab-cli tui-lab-mcp  # Rust — from crates.io
 ```
 
 | Method | Windows x64 | Linux x64 | macOS arm64 | Notes |
@@ -25,56 +43,60 @@ cargo install tui-lab-cli tui-lab-mcp  # Rust — builds from crates.io
 | `cargo install` | ✓ | ✓ | ✓ | Compiles from source |
 | GitHub Release archives | ✓ | ✓ | ✓ | Manual download, unzip, PATH |
 
-New here? Read the [developer guide](https://soubhagya2001.github.io/TUI-Lab/)
-or start at `docs/15-web-guide-plan.md`. Maintainers: registry deploys are
-specified in [`docs/16-packaging-distribution.md`](./docs/16-packaging-distribution.md).
+## 60-second quickstart
 
-## Product name
+```bash
+tuilab init          # scaffolds tuilab.yaml + tests/smoke.yaml
+tuilab run tests     # drives the sample app
 
-*   **Application:** TUI Lab
-*   **CLI binary:** `tuilab`
-*   **Config file:** `tuilab.yaml`
-*   **MCP server binary:** `tuilab-mcp`
-*   **Core library (Rust):** `tui-lab-core`
+# ✓ smoke
+# 2 passed, 0 failed
+```
 
-## Doc map (`docs/`)
+Then point a suite at your own app:
 
-| # | File | Contents |
-|---|------|----------|
-| 1 | [01-vision-scope.md](./docs/01-vision-scope.md) | Problem, users, black-box principle, app types supported |
-| 2 | [02-system-architecture.md](./docs/02-system-architecture.md) | 3-layer model, component diagram, data flow |
-| 3 | [03-terminal-runtime.md](./docs/03-terminal-runtime.md) | PTY/ConPTY, terminal emulator, screen buffer, input |
-| 4 | [04-test-protocol-spec.md](./docs/04-test-protocol-spec.md) | Session-based JSON protocol v1 |
-| 5 | [05-test-definition-dsl.md](./docs/05-test-definition-dsl.md) | Portable YAML schema `tui-lab/v1`, SDK examples |
-| 6 | [06-assertion-snapshot-engine.md](./docs/06-assertion-snapshot-engine.md) | Assertion taxonomy, snapshots, determinism/masking |
-| 7 | [07-cli-reference.md](./docs/07-cli-reference.md) | `init/run/record/report`, flags, examples |
-| 8 | [08-mcp-server-spec.md](./docs/08-mcp-server-spec.md) | 9 MCP tools, Modes A/B, session handling |
-| 9 | [09-sdk-integration-guide.md](./docs/09-sdk-integration-guide.md) | Thin-wrapper SDK strategy, Python/JS/Rust sketches |
-| 10 | [10-recorder-and-ai.md](./docs/10-recorder-and-ai.md) | Recorder, smart waits, AI gen/explain/self-heal |
-| 11 | [11-ci-reporting-debugging.md](./docs/11-ci-reporting-debugging.md) | CI flow, JUnit/HTML, failure bundle |
-| 12 | [12-cross-platform-strategy.md](./docs/12-cross-platform-strategy.md) | Unix PTY vs Windows ConPTY, encoding/resize pitfalls |
-| 13 | [13-feasibility-risks.md](./docs/13-feasibility-risks.md) | Feasibility table, 4 hard problems, mitigations |
-| 14 | [14-implementation-roadmap.md](./docs/14-implementation-roadmap.md) | Language choice, repo layout, Phase 1-6, MVP v1/v2/v3 |
-| 15 | [15-web-guide-plan.md](./docs/15-web-guide-plan.md) | `web-guide/` React docs site plan (stack, pages, deploy) |
-| 16 | [16-packaging-distribution.md](./docs/16-packaging-distribution.md) | Registry deploys: PyPI/npm/crates.io per-platform steps |
+```yaml
+schema: tui-lab/v1
+name: Navigation Test
+application:
+  command: "./myapp"
+terminal:
+  width: 120
+  height: 40
+steps:
+  - wait_for_text: "Main Menu"
+  - press: ENTER
+  - wait_for_text: "Dashboard"
+  - assert_text:
+      contains: "Dashboard"
+cleanup:
+  - press: q
+```
 
-## Design principles (read first)
+Full walkthroughs live in the [developer guide](https://soubhagya2001.github.io/TUI-Lab/).
 
-1.  **Protocol-first, not SDK-first.** One protocol consumed by CLI, MCP, SDKs, future HTTP/WS.
-2.  **Black-box by default.** Test at the terminal byte level. No app changes required.
-3.  **Single core engine.** CLI and MCP share `tui-lab-core`. No duplicate logic.
-4.  **Session-based.** Persistent PTY sessions identified by `session_id`.
-5.  **Sync via waits, not sleeps.** Every assertion has timeout + retry + polling.
-6.  **Deterministic snapshots via masking.** Time/CPU/RAM/IDs must be maskable.
+## Components
 
-## How to read these docs
+*   **`tuilab`** — CLI: `init`, `run` (sequential + `--parallel`), `record`,
+    `report` (HTML/JUnit), `debug`, `step`, `proto` (JSON-lines engine mode).
+    Configured via `tuilab.yaml`.
+*   **`tuilab-mcp`** — MCP server: nine `tui_*` tools for AI assistants, with
+    allowlist + project-folder jail, secret redaction, 8-session cap.
+*   **SDKs** — thin sidecars over `tuilab proto`: `tui-lab` (Python),
+    `@tui-lab/sdk` (TypeScript), `tui-lab-sdk` (Rust).
+*   **`tui-lab-core`** — the single Rust engine shared by CLI and MCP.
 
-*   New to the project → read `docs/01`, `docs/02`, `docs/14` in order.
-*   Implementing runtime → read `docs/03`, `docs/04`, `docs/06`, `docs/12`.
-*   Implementing integrations → read `docs/04`, `docs/07`, `docs/08`, `docs/09`.
-*   Planning QA/CI → read `docs/05`, `docs/06`, `docs/11`.
+## Contact us
 
-## For coding agents
+*   Email: [soubhagyaprusty36@gmail.com](mailto:soubhagyaprusty36@gmail.com)
+*   LinkedIn: [soubhagya-prusty](https://linkedin.com/in/soubhagya-prusty-5424811b6)
+*   GitHub: [soubhagya2001](https://github.com/soubhagya2001)
 
-See [AGENTS.md](./AGENTS.md) — mandatory conventions (tests in separate files,
-reuse over duplication, `utils`/`constants` per crate, verification gates).
+Bug reports: please include your suite file, the exit code, and
+`reports/results.json`.
+
+## For contributors
+
+Design source of truth: `docs/` (vision, architecture, protocol, roadmap).
+Agent conventions: [AGENTS.md](./AGENTS.md). Registry deploys:
+[`docs/16-packaging-distribution.md`](./docs/16-packaging-distribution.md).

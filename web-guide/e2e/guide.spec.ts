@@ -69,6 +69,21 @@ test.describe('Guide site', () => {
     expect(errors).toEqual([])
   })
 
+  test('footer shows contact links', async ({ page }) => {
+    await page.goto('./')
+    const footer = page.locator('footer')
+    await expect(footer.getByText('Contact us')).toBeVisible()
+    await expect(footer.getByRole('link', { name: 'Email' })).toHaveAttribute('href', 'mailto:soubhagyaprusty36@gmail.com')
+    await expect(footer.getByRole('link', { name: 'LinkedIn' })).toHaveAttribute(
+      'href',
+      'https://linkedin.com/in/soubhagya-prusty-5424811b6',
+    )
+    await expect(footer.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/soubhagya2001',
+    )
+  })
+
   test('no dead external links', async ({ page, request }) => {
     await page.goto('./')
     const hrefs = await page.locator('a[href]').evaluateAll((links) =>

@@ -54,8 +54,3 @@ assertions:
 Every interaction that changes the screen must be followed by `wait_for_text`, not a fixed delay. Waits poll with timeout + retry, so suites stay fast on quick machines and stable on slower ones.
 
 <Callout title="Windows tip" tone="warning">On Windows, key handling and resize behave slightly differently than on Unix. If a suite passes on one OS but not the other, the Troubleshooting chapter lists the usual suspects.</Callout>
-
-## Next
-
-- **Assertions & snapshots** — the full assertion taxonomy, masking, and retry semantics.
-- **Recorder** — generate this YAML by driving the app instead of hand-writing it.
