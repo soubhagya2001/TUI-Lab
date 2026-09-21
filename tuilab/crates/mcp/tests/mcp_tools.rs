@@ -269,13 +269,127 @@ async fn mode_a_loop_against_fixture() {
     assert!(close.success, "clean quit reaps exit success");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_waits_do_not_serialize() {
+    // S1: two slow waits on different sessions must overlap. Under the old
+    // global-lock-across-await design they ran back-to-back (~4s+ for two
+    // 2s waits); per-tick locking finishes in ~one timeout.
+    use std::time::{Duration, Instant};
+
+    let (handler, _root) = open_handler("concurrent-waits");
+    let bin = fixture_bin();
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let launch = handler
+            .tui_launch(Parameters(LaunchParams {
+                command: bin.clone(),
+                args: vec![],
+                cwd: None,
+                width: 120,
+                height: 40,
+                env: Default::default(),
+            }))
+            .await
+            .expect("launch")
+            .0;
+        ids.push(launch.session_id);
+    }
+    let unmatchable = "text-that-never-appears-zzz".to_string();
+    let start = Instant::now();
+    let (first, second) = tokio::join!(
+        handler.tui_wait_for_text(Parameters(WaitParams {
+            session_id: ids[0].clone(),
+            text: unmatchable.clone(),
+            regex: false,
+            timeout_ms: 2000,
+        })),
+        handler.tui_wait_for_text(Parameters(WaitParams {
+            session_id: ids[1].clone(),
+            text: unmatchable,
+            regex: false,
+            timeout_ms: 2000,
+        })),
+    );
+    let elapsed = start.elapsed();
+    assert!(!first.expect("wait one").0.found);
+    assert!(!second.expect("wait two").0.found);
+    assert!(
+        elapsed < Duration::from_millis(3500),
+        "waits serialized behind one lock: {elapsed:?}"
+    );
+    for id in &ids {
+        handler
+            .tui_close(Parameters(CloseParams {
+                session_id: id.clone(),
+                quit: Some("q".to_string()),
+            }))
+            .await
+            .expect("close");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_test_rejects_path_traversal() {
+    // S3: absolute paths outside the root and `..` escapes never read.
+    let (handler, root) = open_handler("traversal");
+    let outside = std::env::temp_dir().join(format!(
+        "tuilab-traversal-{}.yaml",
+        std::process::id()
+    ));
+    std::fs::write(&outside, "schema: tui-lab/v1").expect("outside suite");
+    let err = match handler
+        .tui_run_test(Parameters(RunTestParams {
+            test_file: outside.to_string_lossy().into_owned(),
+            terminal: None,
+        }))
+        .await
+    {
+        Ok(_) => panic!("absolute outside must fail"),
+        Err(err) => err,
+    };
+    assert!(err.contains("escapes project root"), "{err}");
+    let err = match handler
+        .tui_run_test(Parameters(RunTestParams {
+            test_file: "../traversal.yaml".to_string(),
+            terminal: None,
+        }))
+        .await
+    {
+        Ok(_) => panic!("dotdot must fail"),
+        Err(err) => err,
+    };
+    assert!(
+        err.contains("escapes project root") || err.contains("suite file"),
+        "{err}"
+    );
+    // `..` to a REAL file outside still hits the jail check, not just
+    // missing-file handling.
+    let dotdot = format!(
+        "../tuilab-traversal-{}.yaml",
+        std::process::id()
+    );
+    let err = match handler
+        .tui_run_test(Parameters(RunTestParams {
+            test_file: dotdot,
+            terminal: None,
+        }))
+        .await
+    {
+        Ok(_) => panic!("dotdot to real file must fail"),
+        Err(err) => err,
+    };
+    assert!(err.contains("escapes project root"), "{err}");
+    let _ = std::fs::remove_file(&outside);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mode_b_runs_yaml_suite() {
-    let (handler, _root) = open_handler("mode-b");
-    // Mode B resolves relative suites under the handler root; the test writes
-    // its own suite with an absolute fixture command (the repo smoke.yaml
-    // uses a cargo-relative command valid only under tuilab/).
-    let root = scratch_root("mode-b-suite");
+    let (handler, root) = open_handler("mode-b");
+    // Mode B resolves suites under the handler root; the test writes its own
+    // suite there with an absolute fixture command (the repo smoke.yaml uses
+    // a cargo-relative command valid only under tuilab/). S3 jails reads to
+    // the root, so the suite must live inside it.
     let suite = root.join("mini.yaml");
     std::fs::write(
         &suite,

@@ -93,3 +93,20 @@ fn echo_round_trip_then_bounded_close() {
         assert!(status.success(), "graceful quit exits 0, got {status:?}");
     }
 }
+
+/// S4: sensitive env keys are rejected before any child spawns.
+#[test]
+fn blocked_env_rejects_spawn() {
+    for blocked in ["LD_PRELOAD", "PATH", "CARGO_HOME"] {
+        let opts = SpawnOptions {
+            command: "never-spawned".to_string(),
+            env: vec![(blocked.to_string(), "evil".to_string())],
+            ..SpawnOptions::default()
+        };
+        let err = PtySession::spawn(&opts).expect_err("blocked env must fail");
+        assert!(
+            err.to_string().contains("blocked env var"),
+            "unexpected error: {err}"
+        );
+    }
+}

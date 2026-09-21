@@ -55,9 +55,11 @@ pub fn to_html(results: &[SuiteResult]) -> String {
     out
 }
 
-/// Minimal HTML escape for text and attribute content.
+/// Minimal HTML escape for text and attribute content (S5: sanitize first so
+/// control bytes never reach the document; escaping neutralizes markup).
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
+    crate::utils::sanitize(text)
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")

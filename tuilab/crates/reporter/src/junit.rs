@@ -65,9 +65,11 @@ pub fn to_junit_all(results: &[SuiteResult]) -> String {
     out
 }
 
-/// Minimal XML escape for attribute and element text.
+/// Minimal XML escape for attribute and element text (S5: sanitize first so
+/// control bytes from screens can never break parsers).
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
+    crate::utils::sanitize(text)
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")

@@ -103,6 +103,25 @@ fn junit_multi_suite_wraps_testsuites() {
 }
 
 #[test]
+fn hostile_screen_is_escaped_and_sanitized() {
+    // S5: a screen carrying markup, entities, and control bytes must come
+    // out inert in both sinks — no raw tags, no NUL/control bytes.
+    let mut result = fixture_result();
+    if let Some(failure) = result.failure.as_mut() {
+        failure.last_screen = "oops <script>alert(&1)</script>\x00\x07\x1b[2J done".to_string();
+    }
+    let xml = to_junit(&result);
+    assert!(!xml.contains("<script>"), "JUnit must escape markup");
+    assert!(!xml.contains('\x00'), "JUnit must strip NUL");
+    assert!(!xml.contains('\x07'), "JUnit must strip BEL");
+    assert!(xml.contains("&lt;script&gt;"), "escaped form present");
+    let html = to_html(&[result]);
+    assert!(!html.contains("<script>alert"), "HTML must escape markup");
+    assert!(!html.contains('\x00'), "HTML must strip NUL");
+    assert!(html.contains("&lt;script&gt;"), "escaped form present");
+}
+
+#[test]
 fn junit_passing_suite_has_no_failures() {
     let mut result = fixture_result();
     result.passed = true;

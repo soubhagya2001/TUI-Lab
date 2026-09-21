@@ -4,7 +4,7 @@
 //! full suites). Every input tool's description ends with the sync rule:
 //! follow it with `tui_wait_for_text`, never assert on a stale screen.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,10 +16,10 @@ use tui_lab_core::{run_file, NewSession, RunOptions, SessionRegistry};
 use tui_lab_input::{encode_key, encode_text};
 use tui_lab_protocol::TestFile;
 use tui_lab_pty::SpawnOptions;
-use tui_lab_runtime::wait_for_text;
+use tui_lab_runtime::matches as screen_matches;
 
 use crate::constants::{MAX_SESSIONS, SESSION_IDLE_SECS};
-use crate::security::{jail, Allowlist};
+use crate::security::{jail, jail_file, Allowlist};
 use crate::tools::{
     AssertOut, AssertParams, CloseOut, CloseParams, CursorPos, LaunchOut, LaunchParams, PressOut,
     PressParams, RunFailure, RunTestOut, RunTestParams, ScreenOut, ScreenParams, SnapshotOut,
@@ -33,6 +33,11 @@ const IDLE_REAP_SECS: u64 = SESSION_IDLE_SECS;
 const INPUT_SETTLE_MS: u64 = 300;
 
 /// Shared server state behind one async mutex.
+///
+/// Locking discipline (S1): the mutex guards map/accounting only. Every tool
+/// takes it for short synchronous critical sections and NEVER holds it
+/// across `.await` — `tui_wait_for_text` re-locks per poll tick so one slow
+/// wait cannot serialize the other sessions.
 pub struct HandlerState {
     /// Live PTY sessions (core-owned).
     pub registry: SessionRegistry,
@@ -229,6 +234,10 @@ impl TuiLabHandler {
 
     /// Poll until text appears (or the timeout elapses). Prefer this over any
     /// fixed sleep — TUI redraw is asynchronous.
+    ///
+    /// Concurrency (S1): the state lock is re-acquired per poll tick and
+    /// never held across the sleep, so waits on different sessions overlap
+    /// instead of serializing behind one slow wait.
     #[tool(
         name = "tui_wait_for_text",
         description = "Wait until text appears on screen (polling with timeout). Use after every input instead of sleeping."
@@ -238,23 +247,32 @@ impl TuiLabHandler {
         params: Parameters<WaitParams>,
     ) -> Result<Json<WaitOut>, String> {
         let params = params.0;
-        let mut state = self.state.lock().await;
-        let session = state
-            .registry
-            .get_mut(&params.session_id)
-            .map_err(|e| tool_error("wait", e))?;
-        let outcome = wait_for_text(
-            || SessionRegistry::pump_once(session, Duration::from_millis(50)),
-            &params.text,
-            params.regex,
-            Duration::from_millis(params.timeout_ms),
-            Duration::from_millis(50),
-        )
-        .await;
+        let timeout = Duration::from_millis(params.timeout_ms);
+        let poll = Duration::from_millis(50);
+        let start = std::time::Instant::now();
+        let mut last_screen = String::new();
+        let mut found = false;
+        while start.elapsed() < timeout {
+            // Short critical section: pump under the lock, match + sleep outside.
+            let text = {
+                let mut state = self.state.lock().await;
+                let session = state
+                    .registry
+                    .get_mut(&params.session_id)
+                    .map_err(|e| tool_error("wait", e))?;
+                SessionRegistry::pump_once(session, Duration::from_millis(50))
+            };
+            last_screen = text;
+            if screen_matches(&last_screen, &params.text, params.regex) {
+                found = true;
+                break;
+            }
+            tokio::time::sleep(poll).await;
+        }
         Ok(Json(WaitOut {
-            found: outcome.found,
-            elapsed_ms: outcome.elapsed.as_millis() as u64,
-            screen: outcome.last_screen,
+            found,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            screen: last_screen,
         }))
     }
 
@@ -334,11 +352,9 @@ impl TuiLabHandler {
     ) -> Result<Json<RunTestOut>, String> {
         let params = params.0;
         let state = self.state.lock().await;
-        let suite_path = if Path::new(&params.test_file).is_absolute() {
-            PathBuf::from(&params.test_file)
-        } else {
-            state.root.join(&params.test_file)
-        };
+        // S3: confine the suite file under the project root (no traversal).
+        let suite_path =
+            jail_file(&state.root, &params.test_file).map_err(|e| tool_error("run_test", e))?;
         let text = std::fs::read_to_string(&suite_path)
             .map_err(|e| tool_error("run_test", format!("{}: {e}", suite_path.display())))?;
         let mut file = TestFile::from_yaml(&text).map_err(|e| tool_error("run_test", e))?;

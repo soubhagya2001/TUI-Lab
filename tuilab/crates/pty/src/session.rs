@@ -17,7 +17,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 
 use crate::constants::{DEFAULT_HEIGHT, DEFAULT_WIDTH, KILL_GRACE_DEFAULT_MS};
 use crate::error::{PtyError, Result};
-use crate::utils::term_for;
+use crate::utils::{env_allowed, term_for};
 
 /// Options for spawning a child under a fresh PTY.
 pub struct SpawnOptions {
@@ -115,6 +115,9 @@ impl PtySession {
         }
         let mut saw_term = false;
         for (key, value) in &opts.env {
+            if !env_allowed(key) {
+                return Err(PtyError::Spawn(format!("blocked env var: {key}")));
+            }
             if key == "TERM" {
                 saw_term = true;
             }

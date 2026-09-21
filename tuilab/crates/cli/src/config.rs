@@ -111,8 +111,14 @@ pub struct SecurityPolicy {
 
 impl Default for SecurityPolicy {
     fn default() -> Self {
+        // Regexes, not globs: `"./*"` as a regex matches nearly anything.
+        // Must mirror `Allowlist::defaults()` in tui-lab-mcp (S2).
         Self {
-            allow_commands: vec!["./*".to_string()],
+            allow_commands: vec![
+                "^\\./.*".to_string(),
+                "^cargo run.*".to_string(),
+                "^python.*".to_string(),
+            ],
         }
     }
 }
@@ -145,4 +151,35 @@ pub fn load(dir: &Path) -> Result<ProjectConfig, String> {
         return Ok(ProjectConfig::default());
     }
     serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// S2: `init`-written defaults must be regexes that admit documented
+    /// launches and block destructive commands (mirrors Allowlist::defaults).
+    #[test]
+    fn default_allowlist_is_regex_safe() {
+        let policy = SecurityPolicy::default();
+        let patterns: Vec<regex::Regex> = policy
+            .allow_commands
+            .iter()
+            .map(|source| regex::Regex::new(source).expect("default pattern compiles"))
+            .collect();
+        let allows = |line: &str| patterns.iter().any(|pattern| pattern.is_match(line));
+        assert!(allows("./myapp"), "relative launches admitted");
+        assert!(allows("cargo run --release"), "cargo run admitted");
+        assert!(allows("python app.py"), "python admitted");
+        assert!(!allows("rm -rf /"), "destructive commands blocked");
+        assert!(!allows("/bin/sh -c evil"), "absolute shells blocked");
+    }
+
+    #[test]
+    fn init_config_round_trips_with_safe_defaults() {
+        let text = serde_yaml::to_string(&ProjectConfig::default()).expect("serialize");
+        let parsed: ProjectConfig = serde_yaml::from_str(&text).expect("parse");
+        assert_eq!(parsed.security, SecurityPolicy::default());
+        assert!(parsed.security.allow_commands.iter().all(|entry| entry != "./*"));
+    }
 }

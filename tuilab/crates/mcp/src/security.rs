@@ -81,6 +81,33 @@ pub fn load_allowlist(root: &Path) -> Result<Allowlist, String> {
     Allowlist::from_sources(&entries)
 }
 
+/// Resolve a suite/file path (absolute, or relative to `root`) and confine
+/// it under `root`. S3: `tui_run_test` must not read outside the project
+/// (path traversal via `..` or absolute paths).
+pub fn jail_file(root: &Path, file: &str) -> Result<PathBuf, String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("project root {}: {e}", root.display()))?;
+    let candidate = {
+        let path = Path::new(file);
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            canonical_root.join(path)
+        }
+    };
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|e| format!("suite file {}: {e}", candidate.display()))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err(format!(
+            "suite file escapes project root: {}",
+            canonical.display()
+        ));
+    }
+    Ok(canonical)
+}
+
 /// Resolve `cwd` (relative to `root`) and confine it under `root`.
 pub fn jail(root: &Path, cwd: Option<&str>) -> Result<PathBuf, String> {
     let canonical_root = root
@@ -137,6 +164,31 @@ mod tests {
         let root = std::env::temp_dir();
         assert!(jail(&root, Some("../..")).is_err());
         assert!(jail(&root, None).is_ok());
+    }
+
+    #[test]
+    fn jail_file_confines_suites() {
+        let root = std::env::temp_dir().join(format!("tuilab-jail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("tests")).expect("scratch");
+        let inside = root.join("tests").join("mini.yaml");
+        std::fs::write(&inside, "schema: tui-lab/v1").expect("suite");
+        // Relative inside-root resolves.
+        let resolved = jail_file(&root, "tests/mini.yaml").expect("inside ok");
+        assert_eq!(resolved, inside.canonicalize().expect("canonical"));
+        // Absolute inside-root resolves.
+        assert!(jail_file(&root, &inside.to_string_lossy()).is_ok());
+        // `..` escape rejected even when it resolves to a real file.
+        let outside = std::env::temp_dir().join(format!("tuilab-jail-out-{}.yaml", std::process::id()));
+        std::fs::write(&outside, "schema: tui-lab/v1").expect("outside file");
+        let dotdot = format!("../{}", outside.file_name().expect("name").to_string_lossy());
+        let err = jail_file(&root, &dotdot).expect_err("dotdot blocked");
+        assert!(err.contains("escapes project root"), "{err}");
+        // Absolute outside rejected too.
+        let err = jail_file(&root, &outside.to_string_lossy()).expect_err("outside blocked");
+        assert!(err.contains("escapes project root"), "{err}");
+        let _ = std::fs::remove_file(&outside);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
