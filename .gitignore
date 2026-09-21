@@ -17,11 +17,15 @@ tuilab/tests/**/*.log
 
 # SDK build artifacts (paths relative to repo root)
 tuilab/sdks/python/dist/
+tuilab/sdks/python/dist-wheels/
+tuilab/sdks/python/src/tuilab/_bin/
 tuilab/sdks/python/*.egg-info/
 tuilab/sdks/python/uv.lock
 tuilab/sdks/python/tests/snapshots/
 tuilab/sdks/javascript/dist/
 tuilab/sdks/javascript/node_modules/
+tuilab/sdks/npm-cli/dist/
+tuilab/sdks/npm-cli/platforms/*/tuilab*
 web-guide/dist/
 web-guide/node_modules/
 .venv/

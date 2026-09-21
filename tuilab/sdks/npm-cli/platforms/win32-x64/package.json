@@ -1,0 +1,9 @@
+{
+  "name": "@tui-lab/cli-win32-x64",
+  "version": "0.1.0",
+  "description": "TUI Lab engine binaries for Windows x64",
+  "license": "MIT OR Apache-2.0",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["tuilab.exe", "tuilab-mcp.exe"]
+}

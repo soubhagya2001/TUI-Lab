@@ -1,0 +1,23 @@
+{
+  "name": "@tui-lab/cli",
+  "version": "0.1.0",
+  "description": "TUI Lab engine binaries (tuilab + tuilab-mcp) with per-platform packages",
+  "license": "MIT OR Apache-2.0",
+  "type": "commonjs",
+  "bin": {
+    "tuilab": "bin/tuilab.js",
+    "tuilab-mcp": "bin/tuilab-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "lib/"
+  ],
+  "optionalDependencies": {
+    "@tui-lab/cli-win32-x64": "0.1.0",
+    "@tui-lab/cli-linux-x64": "0.1.0",
+    "@tui-lab/cli-darwin-arm64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

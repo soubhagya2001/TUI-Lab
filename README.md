@@ -5,6 +5,30 @@
 Distilled from the `TUI Testing System Design` ChatGPT thread (17 Sep 2026) and
 fully audited against it — every section is captured in `docs/01`–`docs/14`.
 
+## Install
+
+One-liners (each bundles the prebuilt engine — no manual binary setup):
+
+```bash
+pip install tui-lab          # Python — tuilab + tuilab-mcp land on PATH
+uv add tui-lab               # uv project, same wheel
+uvx tui-lab run tests/e2e    # uv one-shot, no install
+npx @tui-lab/cli run tests/e2e   # Node — no install
+npm i @tui-lab/sdk           # TypeScript SDK (pulls the engine along)
+cargo install tui-lab-cli tui-lab-mcp  # Rust — builds from crates.io
+```
+
+| Method | Windows x64 | Linux x64 | macOS arm64 | Notes |
+|--------|-------------|-----------|-------------|-------|
+| `pip` / `uv` (`tui-lab`) | ✓ | ✓ | ✓ | Platform wheel embeds both binaries |
+| `npx` / `npm` (`@tui-lab/cli`) | ✓ | ✓ | ✓ | Per-platform optional packages |
+| `cargo install` | ✓ | ✓ | ✓ | Compiles from source |
+| GitHub Release archives | ✓ | ✓ | ✓ | Manual download, unzip, PATH |
+
+New here? Read the [developer guide](https://soubhagya2001.github.io/TUI-Lab/)
+or start at `docs/15-web-guide-plan.md`. Maintainers: registry deploys are
+specified in [`docs/16-packaging-distribution.md`](./docs/16-packaging-distribution.md).
+
 ## Product name
 
 *   **Application:** TUI Lab
@@ -32,6 +56,7 @@ fully audited against it — every section is captured in `docs/01`–`docs/14`.
 | 13 | [13-feasibility-risks.md](./docs/13-feasibility-risks.md) | Feasibility table, 4 hard problems, mitigations |
 | 14 | [14-implementation-roadmap.md](./docs/14-implementation-roadmap.md) | Language choice, repo layout, Phase 1-6, MVP v1/v2/v3 |
 | 15 | [15-web-guide-plan.md](./docs/15-web-guide-plan.md) | `web-guide/` React docs site plan (stack, pages, deploy) |
+| 16 | [16-packaging-distribution.md](./docs/16-packaging-distribution.md) | Registry deploys: PyPI/npm/crates.io per-platform steps |
 
 ## Design principles (read first)
 

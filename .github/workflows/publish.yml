@@ -1,0 +1,194 @@
+# Registry publishing: PyPI + npm + crates.io.
+#
+# Trigger: a published GitHub Release (which release.yml creates from a
+# `vX.Y.Z` tag after building the cargo-dist archives). Each job downloads
+# the release archives for its platform(s) and publishes registry packages
+# built FROM those exact binaries, so versions always move in lockstep.
+#
+# One-time setup (maintainer):
+# - PyPI: add https://pypi.org/manage/project/tui-lab/settings/publishing/
+#   as a trusted publisher (owner soubhagya2001, repo TUI-Lab,
+#   workflow publish.yml, environment pypi). No token needed.
+# - npm: `npm access grant` / trusted publisher for @tui-lab scope
+#   (provenance needs id-token: write; no token needed).
+# - crates.io: repo secret CARGO_REGISTRY_TOKEN (API token, publish scope).
+
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Fail fast unless every registry version matches the release tag.
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check lockstep versions
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          test "$(grep '^version = ' tuilab/Cargo.toml | head -1 | cut -d'\"' -f2)" = "$TAG"
+          test "$(grep '^version = ' tuilab/sdks/python/pyproject.toml | cut -d'\"' -f2)" = "$TAG"
+          test "$(node -p "require('./tuilab/sdks/javascript/package.json').version")" = "$TAG"
+          test "$(node -p "require('./tuilab/sdks/npm-cli/package.json').version")" = "$TAG"
+          echo "all versions = $TAG"
+
+  pypi:
+    needs: versions
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            plat: win_amd64
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            plat: manylinux_x86_64
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            plat: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release download "$GITHUB_REF_NAME"
+          --pattern "*${{ matrix.target }}*"
+          --dir bins --clobber
+      - name: Extract archives
+        shell: bash
+        run: |
+          cd bins
+          for f in *; do
+            case "$f" in
+              *.zip) unzip -o "$f" ;;
+              *.tar.gz) tar xzf "$f" ;;
+            esac
+          done
+      - name: Build platform wheel
+        run: |
+          python -m pip install build wheel
+          python tuilab/sdks/python/pack/pack_wheel.py \
+            --binary-dir bins --plat "${{ matrix.plat }}" \
+            --outdir dist-wheels
+        working-directory: tuilab/sdks/python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.plat }}
+          path: tuilab/sdks/python/dist-wheels/
+
+  publish-pypi:
+    needs: pypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  npm:
+    needs: versions
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            key: win32-x64
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            key: linux-x64
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            key: darwin-arm64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Fetch release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release download "$GITHUB_REF_NAME"
+          --pattern "*${{ matrix.target }}*"
+          --dir bins --clobber
+      - name: Extract archives
+        shell: bash
+        run: |
+          cd bins
+          for f in *; do
+            case "$f" in
+              *.zip) unzip -o "$f" ;;
+              *.tar.gz) tar xzf "$f" ;;
+            esac
+          done
+      - name: Pack platform tarball
+        run: >
+          python pack/pack_npm.py --bin "${{ matrix.key }}=bins"
+        working-directory: tuilab/sdks/npm-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.key }}
+          path: tuilab/sdks/npm-cli/dist/
+
+  publish-npm:
+    needs: npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-*
+          merge-multiple: true
+          path: dist/
+      - name: Publish (provenance via OIDC)
+        run: |
+          for tgz in dist/*.tgz; do npm publish --provenance --access public "$tgz"; done
+
+  cargo:
+    needs: versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Dependency order: leaves → snapshots → core → reporter → binaries/sdk.
+      # Each publish waits for the index so the next crate resolves.
+      - name: Publish crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -e
+          for crate in \
+            tui-lab-input tui-lab-protocol tui-lab-pty tui-lab-runtime \
+            tui-lab-terminal tui-lab-assertions \
+            tui-lab-snapshots \
+            tui-lab-core \
+            tui-lab-reporter \
+            tui-lab-cli tui-lab-mcp tui-lab-sdk; do
+            cargo publish -p "$crate"
+            sleep 30
+          done
+        working-directory: tuilab

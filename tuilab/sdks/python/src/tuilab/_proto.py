@@ -22,29 +22,80 @@ class TuiLabError(Exception):
         self.detail = detail or {}
 
 
-def find_binary(explicit: str | os.PathLike[str] | None = None) -> Path:
-    """Resolve the `tuilab` binary: explicit → TUILAB_BIN → PATH → workspace."""
-    if explicit:
-        candidate = Path(explicit)
-        if candidate.is_file():
-            return candidate
-        raise TuiLabError(f"tuilab binary not found: {explicit}")
-    env = os.environ.get("TUILAB_BIN")
+def _bundled(name: str) -> Path | None:
+    """Binary shipped inside the wheel (`tuilab/_bin/`), if present."""
+    candidate = Path(__file__).resolve().parent / "_bin" / name
+    return candidate if candidate.is_file() else None
+
+
+def binary_name(kind: str = "tuilab") -> str:
+    """Platform binary filename (`tuilab-mcp` supported too)."""
+    suffix = ".exe" if os.name == "nt" else ""
+    return f"{kind}{suffix}"
+
+
+def find_engine(kind: str = "tuilab") -> Path:
+    """Resolve a REAL engine binary, never via PATH.
+
+    Used by the `tuilab`/`tuilab-mcp` console-script launchers: PATH may
+    hold the launcher itself (installed entry points), which would re-exec
+    forever. Order: TUILAB_BIN → wheel bundle → workspace build.
+    """
+    name = binary_name(kind)
+    env = os.environ.get("TUILAB_BIN" if kind == "tuilab" else "TUILAB_MCP_BIN")
     if env and Path(env).is_file():
         return Path(env)
-    on_path = shutil.which("tuilab")
-    if on_path:
-        return Path(on_path)
+    bundled = _bundled(name)
+    if bundled:
+        return bundled
     workspace = (
         Path(__file__).resolve().parent.parent.parent.parent.parent
         / "target"
         / "debug"
-        / ("tuilab.exe" if os.name == "nt" else "tuilab")
+        / name
     )
     if workspace.is_file():
         return workspace
     raise TuiLabError(
-        "tuilab binary not found: set TUILAB_BIN, add it to PATH, "
+        f"no {name} engine bundled: install the tui-lab binary wheel, "
+        "set TUILAB_BIN, or build the workspace (cargo build -p tui-lab-cli)"
+    )
+
+
+def find_binary(explicit: str | os.PathLike[str] | None = None, *, kind: str = "tuilab") -> Path:
+    """Resolve a TUI Lab binary.
+
+    Order: explicit → TUILAB_BIN → wheel bundle → workspace build → PATH.
+    PATH is deliberately last: an installed `tuilab` entry point may be the
+    Python launcher itself, which must never be spawned as the engine
+    (launchers use find_engine, which skips PATH entirely).
+    """
+    name = binary_name(kind)
+    if explicit:
+        candidate = Path(explicit)
+        if candidate.is_file():
+            return candidate
+        raise TuiLabError(f"{name} binary not found: {explicit}")
+    env = os.environ.get("TUILAB_BIN" if kind == "tuilab" else "TUILAB_MCP_BIN")
+    if env and Path(env).is_file():
+        return Path(env)
+    bundled = _bundled(name)
+    if bundled:
+        return bundled
+    workspace = (
+        Path(__file__).resolve().parent.parent.parent.parent.parent
+        / "target"
+        / "debug"
+        / name
+    )
+    if workspace.is_file():
+        return workspace
+    on_path = shutil.which(kind)
+    if on_path:
+        return Path(on_path)
+    raise TuiLabError(
+        f"{name} binary not found: pip install tui-lab (bundles it), "
+        "set TUILAB_BIN, add it to PATH, "
         "or build the workspace (cargo build -p tui-lab-cli)"
     )
 

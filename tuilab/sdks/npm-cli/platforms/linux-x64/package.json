@@ -1,0 +1,9 @@
+{
+  "name": "@tui-lab/cli-linux-x64",
+  "version": "0.1.0",
+  "description": "TUI Lab engine binaries for Linux x64",
+  "license": "MIT OR Apache-2.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["tuilab", "tuilab-mcp"]
+}

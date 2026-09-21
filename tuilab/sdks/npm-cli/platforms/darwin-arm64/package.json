@@ -1,0 +1,9 @@
+{
+  "name": "@tui-lab/cli-darwin-arm64",
+  "version": "0.1.0",
+  "description": "TUI Lab engine binaries for macOS arm64",
+  "license": "MIT OR Apache-2.0",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["tuilab", "tuilab-mcp"]
+}

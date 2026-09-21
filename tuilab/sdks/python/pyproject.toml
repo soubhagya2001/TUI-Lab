@@ -10,8 +10,18 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT OR Apache-2.0" }
 
+[project.scripts]
+tuilab = "tuilab._cli:tuilab"
+tuilab-mcp = "tuilab._cli:tuilab_mcp"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/tuilab"]
+# NOTE: platform binaries staged into src/tuilab/_bin/ by pack/pack_wheel.py
+# are picked up automatically (whole package dir ships). Nothing to declare.
+
+[tool.hatch.build.targets.sdist]
+# Source dists never carry binaries; wheels are built per platform in CI.
+exclude = ["src/tuilab/_bin"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
