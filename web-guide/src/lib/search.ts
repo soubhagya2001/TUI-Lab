@@ -52,9 +52,9 @@ const CORPUS: StoredEntry[] = [
     text: 'Python JavaScript TypeScript Rust sidecar proto JSON-lines pytest node:test tokio',
   },
   {
-    path: '/ci-troubleshooting',
-    title: 'CI & troubleshooting',
-    text: 'GitHub Actions JUnit HTML failure bundle debug ConPTY Windows Linux resize mouse timing flaky',
+    path: '/troubleshooting',
+    title: 'Troubleshooting',
+    text: 'install not found engine hang timeout flaky snapshot mask reports HTML debug failure bundle Windows ConPTY FAQ help',
   },
 ]
 

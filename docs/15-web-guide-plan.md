@@ -22,6 +22,8 @@ files remain the design source of truth and the site links back to them.
     `oniguruma` native dep needs node-gyp/Python unavailable here).
 *   **Tailwind CSS + shadcn/ui** — all UI from reusable shadcn components
     (see §15.4); semantic OKLCH tokens only, dark default + light toggle.
+*   **Shell width:** `max-w-[1440px]` app shell (`px-6`), `w-64` sidebar —
+    narrow gutters were a customer complaint; code blocks get the room.
 *   **Theme:** terminal-green accent (phosphor green on near-black dark,
     deep green on paper light); Inter + JetBrains Mono; see §15.10.
 *   **Animation:** `motion` (Framer Motion successor) for scroll reveals,
@@ -55,15 +57,18 @@ via CSS variables):
 *   Content: `Card` (+Header/Title/Description/Content/Footer), `Alert`
     (callouts: DECIDED / gotcha / Windows-note), `Badge` (phase tags,
     `v1`/`v2` labels), `Accordion` (FAQ), `Table`, `Empty`, `Skeleton`.
-*   Code: `CodeBlock` wrapper (copy button + language label) around fenced
-    MDX code; `Terminal` custom component for the animated hero + step I/O.
+*   Code: `CodeBlock` wrapper (language/filename label + copy button) around
+    fenced MDX code; `OutputBlock` (dark, mono) for expected terminal output;
+    `Terminal` custom component for the animated hero + step I/O.
 *   Feedback/motion: `Tooltip`, `Dialog` (image zoom), page-transition +
     `whileInView` reveals via `motion`.
 
 Custom (only what shadcn lacks): `StepBlock` (number → explanation →
 command → expected output), `Terminal` (typing animation), `CodeTabs`,
-`Mermaid` (architecture diagram from `docs/02`), `FaqAccordion` (on top of
-shadcn `Accordion`), `SdkTabs` (on top of shadcn `Tabs`).
+`Example` (green-tinted card marking complete runnable examples, distinct
+from command snippets), `Mermaid` (architecture diagram from `docs/02`),
+`FaqAccordion` (on top of shadcn `Accordion`), `SdkTabs` (on top of shadcn
+`Tabs`).
 
 ## 15.5 What to show / how to show
 
@@ -77,14 +82,14 @@ apply. Screenshots/GIFs of sample runs land later in `web-guide/public/`.
 | Route | Title | Sources |
 |-------|-------|---------|
 | `/` | Home — hero + 60-second quickstart | `docs/01`, `docs/14` |
-| `/getting-started` | Install, `tuilab init`, first green `run` | `docs/07`, `docs/14` |
-| `/writing-tests` | YAML DSL step reference + examples | `docs/05` |
+| `/getting-started` | Download per OS, `init`, first green `run` | README install matrix, `docs/07` |
+| `/writing-tests` | YAML DSL step reference with examples | `docs/05` |
 | `/assertions-snapshots` | Taxonomy, masking, retry semantics | `docs/06` |
 | `/recorder` | `record` workflow + smart waits | `docs/10` |
 | `/cli-reference` | Commands, flags, `tuilab.yaml`, exit codes | `docs/07` |
 | `/mcp-agents` | 9 MCP tools, Modes A/B, allowlist + cwd jail | `docs/08` |
 | `/sdks` | Setup + sketches, tabbed Py/JS/Rust | `docs/09` |
-| `/ci-troubleshooting` | CI example, JUnit/HTML reports, failure bundle, FAQ | `docs/11`, `docs/12` |
+| `/troubleshooting` | User FAQ: installs, hangs, flakes, reports | distilled from `docs/11`, `docs/12` (no CI content — end-customer guide) |
 
 Shared layout: sidebar nav (shadcn `Sidebar`), top search, dark theme,
 mobile-responsive with `Sheet` nav. Content rule: distill, link back to the

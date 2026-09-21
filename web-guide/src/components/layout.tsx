@@ -139,7 +139,7 @@ export function Layout() {
   return (
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-6">
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild className="lg:hidden">
               <Button variant="ghost" size="icon" aria-label="Open navigation">
@@ -170,8 +170,8 @@ export function Layout() {
           </Button>
         </div>
       </header>
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4">
-        <aside className="hidden w-60 shrink-0 lg:block">
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1 gap-6 px-6">
+        <aside className="hidden w-64 shrink-0 lg:block">
           <div className="sticky top-14 max-h-[calc(100svh-3.5rem)] overflow-y-auto py-4">
             <NavList />
           </div>
@@ -203,7 +203,7 @@ export function Layout() {
         </main>
       </div>
       <footer className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-1 px-6 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>TUI Lab developer guide — black-box testing for terminal apps.</span>
           <a
             className="text-primary underline underline-offset-4"

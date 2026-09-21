@@ -1,22 +1,45 @@
-import { Callout } from '../components/callout-code-tabs';
+import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
+import { OutputBlock } from '../components/code-block';
 import { StepBlock, StepDescription } from '../components/step-block';
 
 # Getting started
 
-From zero to your first green run in about five minutes.
+From zero to your first green run in about five minutes. No Rust toolchain needed — just install and go.
 
-<StepBlock step={1} title="Install the engine">
+<StepBlock step={1} title="Download and install">
 
-<StepDescription>Build the `tuilab` binary from the Rust workspace. You need Rust stable 1.75+.</StepDescription>
+<StepDescription>Pick the installer that fits your machine. Every option bundles the engine (`tuilab` + `tuilab-mcp`) — nothing else to download.</StepDescription>
 
-```bash
-git clone https://github.com/soubhagya2001/TUI-Lab.git
-cd TUI-Lab/tuilab
-cargo build --release -p tui-lab-cli
-./target/release/tuilab --help
-```
+<CodeTabs tabs={[
+  {
+    label: 'Windows', value: 'windows', content:
+    <pre><code>{`pip install tui-lab
+tuilab --version`}</code></pre>,
+  },
+  {
+    label: 'macOS / Linux', value: 'unix', content:
+    <pre><code>{`pip install tui-lab
+tuilab --version`}</code></pre>,
+  },
+  {
+    label: 'Node.js', value: 'node', content:
+    <pre><code>{`npx @tui-lab/cli --version`}</code></pre>,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <pre><code>{`cargo install tui-lab-cli tui-lab-mcp
+tuilab --version`}</code></pre>,
+  },
+  {
+    label: 'Portable archive', value: 'archive', content:
+    <pre><code>{`# Download the archive for your OS from GitHub Releases,
+# unzip it, and add the folder to your PATH.
+tuilab --version`}</code></pre>,
+  },
+]} />
 
-<Callout title="Windows note" tone="warning">TUI Lab drives apps through Windows ConPTY on Windows and Unix PTYs elsewhere. Always verify on both — ConPTY parity is the project's top risk area (see CI &amp; troubleshooting).</Callout>
+<Callout title="Prefer uv?">`uv add tui-lab` works the same as pip, and `uvx tui-lab run …` runs without installing anything.</Callout>
 
 </StepBlock>
 
@@ -29,6 +52,8 @@ tuilab init
 # -> tuilab.yaml + tests/smoke.yaml
 ```
 
+<Example title="Generated tuilab.yaml" description="Project settings created by init — edit paths, terminal size, and timeouts to taste.">
+
 ```yaml
 version: "1.0"
 tests_dir: tests
@@ -40,28 +65,31 @@ env:
   TERM: xterm-256color
 ```
 
+</Example>
+
 </StepBlock>
 
 <StepBlock step={3} title="Run your first suite" tag="tuilab run">
 
-<StepDescription>Point a suite at any terminal app — this one drives the bundled Ratatui sample.</StepDescription>
+<StepDescription>Run the starter suite. A green run looks like this:</StepDescription>
 
 ```bash
-tuilab run tests/e2e
+tuilab run tests
 ```
 
-```text
+<OutputBlock title="expected output">
+
 ✓ smoke
-✓ search-flow
 2 passed, 0 failed
-```
 
-Depending on the exit code you know what happened: `0` all passed, `1` a test failed, `2` config/schema error, `3` launch/PTY error, `4` timeout with the hung process killed.
+</OutputBlock>
+
+Each run ends with an exit code: `0` all passed, `1` a test failed, `2` config/schema error, `3` launch/PTY error, `4` timeout with the hung process killed.
 
 </StepBlock>
 
 ## Where next
 
-- **Writing tests** — the full YAML step reference.
+- **Writing tests** — point a suite at your own app.
 - **CLI reference** — every command, flag, and `tuilab.yaml` field.
-- **CI & troubleshooting** — run the same suites in GitHub Actions.
+- **Troubleshooting** — when a run fails, start here.

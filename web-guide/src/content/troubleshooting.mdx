@@ -1,0 +1,50 @@
+import { Callout } from '../components/callout-code-tabs';
+
+# Troubleshooting
+
+Something red? Work through this list top to bottom — it covers nearly every failure users hit.
+
+## Install problems
+
+**`tuilab` not found after install.** Close and reopen your terminal (PATH refresh), then `tuilab --version`. The `pip`/`uv` install puts both `tuilab` and `tuilab-mcp` on PATH; the npm route exposes them via `npx @tui-lab/cli`.
+
+**Wrong binary for the OS.** Each installer is platform-specific (Windows x64, Linux x64, macOS arm64). If you copied an install across machines, reinstall on the target machine instead.
+
+## The app won't launch (exit 3)
+
+- Check the `command` path in your suite — relative paths resolve from `cwd`, which must sit inside your project folder.
+- Make sure the app actually starts non-interactively: run its command by hand once and confirm it paints without extra input.
+- Set `TERM=xterm-256color` (the default in `tuilab.yaml`) unless your app needs a different terminal type.
+
+## Hangs and timeouts (exit 4)
+
+The app never painted the waited text. Usual causes:
+
+1.  A missing `wait_for_text` after a state-changing step — every `press`/`type` that changes the screen needs one.
+2.  Too-tight `timeout:` on launch or first paint — be generous there, strict later.
+3.  Wrong terminal size — some apps redraw or paginate at 80x24 vs 120x40; match `default_terminal` to how you run the app by hand.
+
+## Flaky snapshots
+
+Mask everything volatile: clocks, PIDs, durations, random IDs — see Assertions & snapshots. An unmasked golden flakes the moment any of those change.
+
+## Reports and failure bundles
+
+Every failure captures screens, input history, and snapshot diffs:
+
+```bash
+# Step 1: read the structured failure
+tuilab debug reports/results.json
+
+# Step 2: open the visual diff
+tuilab report --format html
+```
+
+## Windows tips
+
+<Callout title="Windows ConPTY" tone="warning">Key-press/release can double-fire, and resize paths diverge most from Unix. If a suite passes on one OS but not the other, compare the failure-bundle screens first — it is usually a timing wait or a key-encoding difference.</Callout>
+
+## Still stuck?
+
+- **MCP launch rejected?** The command must match `security.allow_commands` and `cwd` must sit under the project root.
+- Open an issue at `github.com/soubhagya2001/TUI-Lab` with your suite file, the exit code, and `reports/results.json`.

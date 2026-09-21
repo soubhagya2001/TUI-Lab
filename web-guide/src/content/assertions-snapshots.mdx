@@ -1,8 +1,9 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
 
 # Assertions & snapshots
 
-## Taxonomy
+## Assertion snippets
 
 Text:
 
@@ -49,7 +50,30 @@ assertions:
 - **Golden snapshots** — full-screen text compared against a stored file. First run writes the golden; later runs diff.
 - **Masked snapshots** — volatile regions (timestamps, CPU/RAM, IDs) declared with `region:` masks so goldens stay deterministic.
 
-<Callout title="Mask everything volatile">Time, PIDs, durations, and random IDs must be maskable. An unmasked golden is a flaky test waiting for CI to prove it.</Callout>
+<Example title="Suite with a masked snapshot" description="The clock and status line change every run, so a regex plus a bottom-row mask blanks them — everything else must match exactly.">
+
+```yaml
+schema: tui-lab/v1
+name: Dashboard snapshot
+application:
+  command: "./myapp"
+terminal:
+  width: 120
+  height: 40
+steps:
+  - wait_for_text: "Dashboard"
+  - snapshot:
+      name: dashboard
+      mask:
+        - regex: "\\d{2}:\\d{2}:\\d{2}"
+        - region:bottom:1
+cleanup:
+  - press: q
+```
+
+</Example>
+
+<Callout title="Mask everything volatile">Time, PIDs, durations, and random IDs must be maskable. An unmasked golden is a flaky test waiting to happen.</Callout>
 
 ## Timing / retry semantics
 
@@ -58,4 +82,4 @@ Every wait and assertion carries a timeout with polling + retry. Tune per step w
 ## Next
 
 - **Recorder** — capture assertions from a live session.
-- **CI & troubleshooting** — read failure diffs in the HTML report.
+- **Troubleshooting** — read failure diffs in the HTML report.

@@ -55,9 +55,9 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     sources: ['docs/09-sdk-integration-guide.md'],
   },
   {
-    path: '/ci-troubleshooting',
-    title: 'CI & troubleshooting',
-    description: 'CI example, reports, failure bundle, FAQ.',
+    path: '/troubleshooting',
+    title: 'Troubleshooting',
+    description: 'Install problems, hangs, flakes, reports, FAQ.',
     sources: ['docs/11-ci-reporting-debugging.md', 'docs/12-cross-platform-strategy.md'],
   },
 ]

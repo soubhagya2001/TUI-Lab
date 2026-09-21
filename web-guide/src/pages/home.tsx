@@ -18,7 +18,7 @@ const HERO_SCRIPT: TerminalLine[] = [
 const STATS = [
   { value: '9', label: 'protocol actions' },
   { value: '3', label: 'SDKs (Py / JS / Rust)' },
-  { value: '2', label: 'OS in CI (Win + Linux)' },
+  { value: '2', label: 'OS supported (Win + Linux)' },
 ]
 
 const HOW_IT_WORKS = [

@@ -6,12 +6,12 @@ import { GUIDE_ROUTES } from '@/lib/nav'
 import { ThemeProvider } from '@/lib/theme'
 import { Home } from '@/pages/home'
 import AssertionsSnapshots from '@/content/assertions-snapshots.mdx'
-import CiTroubleshooting from '@/content/ci-troubleshooting.mdx'
 import CliReference from '@/content/cli-reference.mdx'
 import GettingStarted from '@/content/getting-started.mdx'
 import McpAgents from '@/content/mcp-agents.mdx'
 import Recorder from '@/content/recorder.mdx'
 import Sdks from '@/content/sdks.mdx'
+import Troubleshooting from '@/content/troubleshooting.mdx'
 import WritingTests from '@/content/writing-tests.mdx'
 
 const CHAPTERS: Record<string, React.ComponentType> = {
@@ -22,7 +22,7 @@ const CHAPTERS: Record<string, React.ComponentType> = {
   '/cli-reference': CliReference,
   '/mcp-agents': McpAgents,
   '/sdks': Sdks,
-  '/ci-troubleshooting': CiTroubleshooting,
+  '/troubleshooting': Troubleshooting,
 }
 
 function Chapter({ path }: { path: string }) {

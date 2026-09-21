@@ -1,10 +1,11 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
 
 # Writing tests
 
 One portable YAML format (`tui-lab/v1`) runnable from the CLI, MCP (`tui_run_test`), and SDKs.
 
-## Minimal suite
+<Example title="Minimal suite" description="Launches any terminal app, waits for each screen, asserts, and quits cleanly.">
 
 ```yaml
 schema: tui-lab/v1
@@ -32,6 +33,8 @@ assertions:
   - exit_code: 0
 ```
 
+</Example>
+
 ## Step reference (v1)
 
 | Step | Purpose |
@@ -48,9 +51,9 @@ assertions:
 
 ## The golden rule: sync via waits
 
-Every interaction that changes the screen must be followed by `wait_for_text`, not a fixed delay. Waits poll with timeout + retry, so suites stay fast on quick machines and stable on slow CI runners.
+Every interaction that changes the screen must be followed by `wait_for_text`, not a fixed delay. Waits poll with timeout + retry, so suites stay fast on quick machines and stable on slower ones.
 
-<Callout title="ConPTY caution" tone="warning">On Windows, key handling and resize behave slightly differently than on Unix PTYs. New suites should pass on both before merge — the CI &amp; troubleshooting chapter lists the known pitfalls.</Callout>
+<Callout title="Windows tip" tone="warning">On Windows, key handling and resize behave slightly differently than on Unix. If a suite passes on one OS but not the other, the Troubleshooting chapter lists the usual suspects.</Callout>
 
 ## Next
 

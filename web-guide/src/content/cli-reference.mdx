@@ -1,4 +1,5 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
 
 # CLI reference
 
@@ -18,7 +19,7 @@ tuilab run tests/e2e/smoke.yaml --parallel 4
 # end with Ctrl+\ or stdin EOF; quit the app first
 tuilab record -- ./myapp
 
-# Re-render stored results (JUnit or self-contained HTML)
+# Re-render stored results (self-contained HTML or JUnit XML)
 tuilab report --format html
 
 # Debug a failed run (full failure bundle: screens, history, diffs)
@@ -33,7 +34,7 @@ tuilab proto
 
 Slots clamp to `[1, registry cap 8]`; results stay in input order; a failing suite never aborts its siblings.
 
-## `tuilab.yaml`
+<Example title="Project configuration" description="The full tuilab.yaml: where suites live, default terminal size and timeouts, parallelism, and where reports go.">
 
 ```yaml
 version: "1.0"
@@ -46,6 +47,8 @@ report: { json: reports/results.json, html: reports/index.html, junit: reports/j
 env:
   TERM: xterm-256color
 ```
+
+</Example>
 
 ## Exit codes
 
@@ -61,5 +64,5 @@ env:
 
 ## Next
 
-- **CI & troubleshooting** — the GitHub Actions example.
+- **Troubleshooting** — when a run fails, start here.
 - **MCP & AI agents** — drive sessions from an agent instead of YAML.

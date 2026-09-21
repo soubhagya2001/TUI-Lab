@@ -8,7 +8,7 @@ const CHAPTERS = [
   { hash: '#/cli-reference', heading: 'CLI reference' },
   { hash: '#/mcp-agents', heading: 'MCP & AI agents' },
   { hash: '#/sdks', heading: 'SDKs' },
-  { hash: '#/ci-troubleshooting', heading: 'CI & troubleshooting' },
+  { hash: '#/troubleshooting', heading: 'Troubleshooting' },
 ]
 
 test.describe('Guide site', () => {

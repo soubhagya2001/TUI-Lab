@@ -1,8 +1,11 @@
 import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
 
 # SDKs
 
-One rule: **SDKs are thin wrappers**. No native PTY code — each SDK spawns the `tuilab` binary and speaks the `tuilab proto` JSON-lines wire contract (one action in, one reply out). Priority order: Python first, then JavaScript, then Rust. Versions move in lockstep with the engine.
+One rule: **SDKs are thin wrappers**. No native PTY code — each SDK spawns the `tuilab` engine and speaks the `tuilab proto` JSON-lines wire contract (one action in, one reply out). Versions move in lockstep with the engine.
+
+<Example title="Same flow, three languages" description="Launch an app, wait for each screen, assert, and close — pick your tab.">
 
 <CodeTabs tabs={[
   {
@@ -37,7 +40,9 @@ t.assert_text_contains("Dashboard").await?;`}</code></pre>,
   },
 ]} />
 
-<Callout title="Binary resolution">Each SDK locates the `tuilab` binary (PATH, then well-known build locations) and surfaces a clear error when it is missing — install the engine first (see Getting started).</Callout>
+</Example>
+
+<Callout title="Engine included">The `pip`/`uv` and `npm` installs bundle the engine, so the SDKs work out of the box. Rust users: install the engine first (`cargo install tui-lab-cli` or another installer) or point `TUILAB_BIN` at it.</Callout>
 
 ## Next
 

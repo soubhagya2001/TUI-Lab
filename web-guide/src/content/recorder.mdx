@@ -1,4 +1,5 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Example } from '../components/example';
 
 # Recorder
 
@@ -13,6 +14,27 @@ tuilab record -- myapp --flag
 ```
 
 The recorder owns the PTY, paces input in beats, forwards bytes verbatim, and emits a suite where pauses become `wait_for_text` steps with border-stripped targets — never `sleep`.
+
+<Example title="Emitted recording" description="What the recorder writes: your keypresses interleaved with the waits it synthesized. Hand-tune from here.">
+
+```yaml
+schema: tui-lab/v1
+name: recorded-login
+application:
+  command: "./myapp"
+steps:
+  - wait_for_text: "Login"
+  - type: "demo"
+  - press: TAB
+  - type: "s3cret"
+    sensitive: true
+  - press: ENTER
+  - wait_for_text: "Dashboard"
+cleanup:
+  - press: q
+```
+
+</Example>
 
 ## Replay the capture
 
