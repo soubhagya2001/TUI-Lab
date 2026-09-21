@@ -1,5 +1,4 @@
 import type { ComponentProps } from 'react'
-import { CodeBlock } from '@/components/code-block'
 import { cn } from '@/lib/utils'
 
 function H1(props: ComponentProps<'h1'>) {
@@ -79,7 +78,8 @@ export const mdxComponents = {
   ul: Ul,
   ol: Ol,
   li: Li,
-  pre: CodeBlock,
+  // NOTE: no `pre` mapping — MDX bypasses it for fenced blocks, so all
+  // code goes through the explicit <Snippet> component instead.
   code: InlineCode,
   table: Table,
   th: Th,

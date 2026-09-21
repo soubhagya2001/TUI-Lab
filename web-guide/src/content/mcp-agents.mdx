@@ -1,10 +1,11 @@
 import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
 import { Example } from '../components/example';
 import { StepBlock, StepDescription } from '../components/step-block';
 
 # MCP & AI agents
 
-`tuilab-mcp` plugs the engine into any AI assistant that speaks the Model Context Protocol. Your agent launches terminal apps, presses keys, reads screens, and runs whole suites — while you watch.
+`tuilab-mcp` plugs the engine into any AI assistant that speaks the Model Context Protocol. Instead of writing YAML yourself, you describe what to test in plain words — the agent launches your app, presses keys, reads screens, and reports back.
 
 <StepBlock step={1} title="Install the engine">
 
@@ -23,44 +24,41 @@ tuilab-mcp --help
 <CodeTabs tabs={[
   {
     label: 'Claude Code', value: 'claude', content:
-    <pre><code>{`claude mcp add tuilab -- tuilab-mcp`}</code></pre>,
+    <Snippet label="bash" code={`claude mcp add tuilab -- tuilab-mcp`} />,
   },
   {
     label: 'Cursor', value: 'cursor', content:
-    <pre><code>{`// .cursor/mcp.json
-{
+    <Snippet label=".cursor/mcp.json" code={`{
   "mcpServers": {
     "tuilab": { "command": "tuilab-mcp" }
   }
-}`}</code></pre>,
+}`} />,
   },
   {
     label: 'VS Code', value: 'vscode', content:
-    <pre><code>{`// .vscode/mcp.json
-{
+    <Snippet label=".vscode/mcp.json" code={`{
   "servers": {
     "tuilab": { "command": "tuilab-mcp" }
   }
-}`}</code></pre>,
+}`} />,
   },
   {
     label: 'Windsurf', value: 'windsurf', content:
-    <pre><code>{`// ~/.codeium/windsurf/mcp_config.json
-{
+    <Snippet label="mcp_config.json" code={`{
   "mcpServers": {
     "tuilab": { "command": "tuilab-mcp" }
   }
-}`}</code></pre>,
+}`} />,
   },
   {
     label: 'Any MCP client', value: 'generic', content:
-    <pre><code>{`{
+    <Snippet label="json" code={`{
   "mcpServers": {
     "tuilab": {
       "command": "/absolute/path/to/tuilab-mcp"
     }
   }
-}`}</code></pre>,
+}`} />,
   },
 ]} />
 
@@ -74,11 +72,9 @@ tuilab-mcp --help
 
 <Example title="First agent-driven test" description="Paste into your assistant after connecting the server.">
 
-```text
-Launch ./myapp with TUI Lab, wait for the main menu,
+<Snippet label="prompt to paste" code={`Launch ./myapp with TUI Lab, wait for the main menu,
 select the second item, and tell me what the screen shows.
-Then close the session.
-```
+Then close the session.`} />
 
 </Example>
 

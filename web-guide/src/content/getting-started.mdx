@@ -1,11 +1,12 @@
 import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
 import { Example } from '../components/example';
 import { OutputBlock } from '../components/code-block';
 import { StepBlock, StepDescription } from '../components/step-block';
 
 # Getting started
 
-From zero to your first green run in about five minutes. No Rust toolchain needed — just install and go.
+From zero to your first green run in about five minutes. No Rust toolchain needed — just install and go. You'll install the engine, scaffold a project, and run the starter suite; afterwards every chapter builds on this loop.
 
 <StepBlock step={1} title="Download and install">
 
@@ -14,28 +15,28 @@ From zero to your first green run in about five minutes. No Rust toolchain neede
 <CodeTabs tabs={[
   {
     label: 'Windows', value: 'windows', content:
-    <pre><code>{`pip install tui-lab
-tuilab --version`}</code></pre>,
+    <Snippet label="powershell" code={`pip install tui-lab
+tuilab --version`} />,
   },
   {
     label: 'macOS / Linux', value: 'unix', content:
-    <pre><code>{`pip install tui-lab
-tuilab --version`}</code></pre>,
+    <Snippet label="bash" code={`pip install tui-lab
+tuilab --version`} />,
   },
   {
     label: 'Node.js', value: 'node', content:
-    <pre><code>{`npx @tui-lab/cli --version`}</code></pre>,
+    <Snippet label="bash" code={`npx @tui-lab/cli --version`} />,
   },
   {
     label: 'Rust', value: 'rust', content:
-    <pre><code>{`cargo install tui-lab-cli tui-lab-mcp
-tuilab --version`}</code></pre>,
+    <Snippet label="bash" code={`cargo install tui-lab-cli tui-lab-mcp
+tuilab --version`} />,
   },
   {
     label: 'Portable archive', value: 'archive', content:
-    <pre><code>{`# Download the archive for your OS from GitHub Releases,
+    <Snippet label="bash" code={`# Download the archive for your OS from GitHub Releases,
 # unzip it, and add the folder to your PATH.
-tuilab --version`}</code></pre>,
+tuilab --version`} />,
   },
 ]} />
 
@@ -47,23 +48,19 @@ tuilab --version`}</code></pre>,
 
 <StepDescription>Create `tuilab.yaml` plus a starter smoke suite.</StepDescription>
 
-```bash
-tuilab init
-# -> tuilab.yaml + tests/smoke.yaml
-```
+<Snippet label="bash" code={`tuilab init
+# -> tuilab.yaml + tests/smoke.yaml`} />
 
 <Example title="Generated tuilab.yaml" description="Project settings created by init — edit paths, terminal size, and timeouts to taste.">
 
-```yaml
-version: "1.0"
+<Snippet label="tuilab.yaml" code={`version: "1.0"
 tests_dir: tests
 snapshots_dir: tests/snapshots
 default_terminal: { width: 120, height: 40 }
 default_timeout: 10s
 report: { json: reports/results.json, html: reports/index.html, junit: reports/junit.xml }
 env:
-  TERM: xterm-256color
-```
+  TERM: xterm-256color`} />
 
 </Example>
 
@@ -73,9 +70,7 @@ env:
 
 <StepDescription>Run the starter suite. A green run looks like this:</StepDescription>
 
-```bash
-tuilab run tests
-```
+<Snippet label="bash" code={`tuilab run tests`} />
 
 <OutputBlock title="expected output">
 

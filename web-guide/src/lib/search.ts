@@ -73,8 +73,17 @@ function getIndex() {
 export async function searchGuide(query: string, limit = 7): Promise<SearchEntry[]> {
   const q = query.trim()
   if (q.length < 2) return []
-  const raw = (await getIndex().search(q, { limit })) as unknown as (string | string[])[]
-  const flat: string[] = raw.flatMap((id) => (Array.isArray(id) ? id : [id]))
+  // The ESM bundle resolves non-enrich Document search to
+  // [{ field, result: [ids] }] (the CJS bundle returns flat ids).
+  // Handle both shapes.
+  const raw = (await getIndex().search(q, { limit })) as unknown as Array<
+    { result?: string[] } | string | string[]
+  >
+  const flat: string[] = raw.flatMap((group): string[] => {
+    if (typeof group === 'string') return [group]
+    if (Array.isArray(group)) return group
+    return group.result ?? []
+  })
   const seen = new Set<string>()
   const out: SearchEntry[] = []
   for (const id of flat) {

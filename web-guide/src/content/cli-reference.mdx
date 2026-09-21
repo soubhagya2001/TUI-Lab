@@ -1,12 +1,18 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
 import { Example } from '../components/example';
 
 # CLI reference
 
+Everything `tuilab` can do, in one place. Day to day you'll use `run` (and
+`record` to create suites); the rest — `report`, `debug`, `step`, `proto` —
+cover reporting, failure triage, and SDK integration. All commands read
+`tuilab.yaml` in the current directory and exit non-zero on failure, so they
+compose with scripts and shortcuts.
+
 ## Commands
 
-```bash
-# Scaffold project -> tuilab.yaml + tests/smoke.yaml
+<Snippet label="bash" code={`# Scaffold project -> tuilab.yaml + tests/smoke.yaml
 tuilab init
 
 # Run all tests (defaults to the configured tests dir)
@@ -16,7 +22,7 @@ tuilab run
 tuilab run tests/e2e/smoke.yaml --parallel 4
 
 # Interactive recording (drives the app, emits YAML with smart waits)
-# end with Ctrl+\ or stdin EOF; quit the app first
+# end with Ctrl+\\ or stdin EOF; quit the app first
 tuilab record -- ./myapp
 
 # Re-render stored results (self-contained HTML or JUnit XML)
@@ -29,15 +35,13 @@ tuilab debug reports/results.json
 tuilab run tests/e2e --step
 
 # JSON-lines engine mode for SDK sidecars — one action in, one reply out
-tuilab proto
-```
+tuilab proto`} />
 
 Slots clamp to `[1, registry cap 8]`; results stay in input order; a failing suite never aborts its siblings.
 
 <Example title="Project configuration" description="The full tuilab.yaml: where suites live, default terminal size and timeouts, parallelism, and where reports go.">
 
-```yaml
-version: "1.0"
+<Snippet label="tuilab.yaml" code={`version: "1.0"
 tests_dir: tests
 snapshots_dir: tests/snapshots
 default_terminal: { width: 120, height: 40 }
@@ -45,8 +49,7 @@ default_timeout: 10s
 parallel: 4
 report: { json: reports/results.json, html: reports/index.html, junit: reports/junit.xml }
 env:
-  TERM: xterm-256color
-```
+  TERM: xterm-256color`} />
 
 </Example>
 

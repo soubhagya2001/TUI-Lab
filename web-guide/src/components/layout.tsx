@@ -85,7 +85,10 @@ function SearchBox() {
         className="pl-9"
       />
       {open && results.length > 0 && (
-        <div className="absolute top-full z-50 mt-1 w-full overflow-hidden rounded-lg border bg-popover shadow-lg">
+        <div
+          data-testid="search-results"
+          className="absolute top-full z-50 mt-1 w-full overflow-hidden rounded-lg border bg-popover shadow-lg"
+        >
           {results.map((result) => (
             <Link
               key={result.path}

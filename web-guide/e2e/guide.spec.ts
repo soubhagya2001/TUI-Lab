@@ -42,10 +42,12 @@ test.describe('Guide site', () => {
     await expect(html).toHaveClass(/dark/)
   })
 
-  test('search finds chapters', async ({ page }) => {
+  test('search shows chapter suggestions while typing', async ({ page }) => {
     await page.goto('./')
     await page.getByRole('textbox', { name: 'Search the guide' }).fill('snapshot')
-    await expect(page.getByRole('link', { name: /Assertions & snapshots/ })).toBeVisible()
+    const dropdown = page.getByTestId('search-results')
+    await expect(dropdown).toBeVisible()
+    await expect(dropdown.getByRole('link', { name: /Assertions & snapshots/ })).toBeVisible()
   })
 
   test('prev/next walk the whole guide', async ({ page }) => {
@@ -81,6 +83,14 @@ test.describe('Guide site', () => {
       expect(box.y, `card ${i} overlaps the previous block`).toBeGreaterThan(previousBottom + 8)
       previousBottom = box.y + box.height
     }
+  })
+
+  test('snippet copy buttons copy code to clipboard', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('./#/getting-started')
+    await page.getByRole('button', { name: 'Copy code' }).first().click()
+    const clipped = await page.evaluate(() => navigator.clipboard.readText())
+    expect(clipped).toContain('pip install tui-lab')
   })
 
   test('footer shows contact links', async ({ page }) => {

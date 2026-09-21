@@ -1,42 +1,52 @@
 import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
 import { Example } from '../components/example';
 
 # SDKs
 
-One rule: **SDKs are thin wrappers**. No native PTY code — each SDK spawns the `tuilab` engine and speaks the `tuilab proto` JSON-lines wire contract (one action in, one reply out). Versions move in lockstep with the engine.
+Prefer code over YAML? The SDKs wrap the same engine in your language's
+idioms — sessions as objects, waits as awaited calls, failures as
+exceptions. One rule governs all three: **SDKs are thin wrappers**. No native
+PTY code — each SDK spawns the `tuilab` engine and speaks the `tuilab proto`
+JSON-lines wire contract (one action in, one reply out). Versions move in
+lockstep with the engine, so upgrade engine and SDK together.
+
+<Snippet label="bash" code={`pip install tui-lab        # Python
+npm i @tui-lab/sdk       # JavaScript / TypeScript
+# Rust: add tui-lab-sdk to Cargo.toml`} />
 
 <Example title="Same flow, three languages" description="Launch an app, wait for each screen, assert, and close — pick your tab.">
 
 <CodeTabs tabs={[
   {
     label: 'Python', value: 'python', content:
-    <pre><code>{`from tuilab import TuiTest
+    <Snippet label="python" code={`from tuilab import TuiTest
 
 with TuiTest("./myapp") as t:
     t.wait_for_text("Main Menu", timeout=5)
     t.press("ENTER")
     t.wait_for_text("Dashboard")
-    t.assert_text(contains="Dashboard")`}</code></pre>,
+    t.assert_text(contains="Dashboard")`} />,
   },
   {
     label: 'JavaScript', value: 'js', content:
-    <pre><code>{`import { TuiTest } from "@tui-lab/sdk";
+    <Snippet label="typescript" code={`import { TuiTest } from "@tui-lab/sdk";
 
 using t = await TuiTest.launch("./myapp");
 await t.waitForText("Main Menu", { timeout: 5000 });
 await t.press("ENTER");
 await t.waitForText("Dashboard");
-await t.assertText({ contains: "Dashboard" });`}</code></pre>,
+await t.assertText({ contains: "Dashboard" });`} />,
   },
   {
     label: 'Rust', value: 'rust', content:
-    <pre><code>{`use tui_lab_sdk::TuiTest;
+    <Snippet label="rust" code={`use tui_lab_sdk::TuiTest;
 
 let t = TuiTest::launch("./myapp").await?;
 t.wait_for_text("Main Menu", Duration::from_secs(5)).await?;
 t.press("ENTER").await?;
 t.wait_for_text("Dashboard", Duration::from_secs(5)).await?;
-t.assert_text_contains("Dashboard").await?;`}</code></pre>,
+t.assert_text_contains("Dashboard").await?;`} />,
   },
 ]} />
 

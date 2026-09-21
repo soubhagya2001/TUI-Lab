@@ -1,14 +1,18 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
 import { Example } from '../components/example';
 
 # Writing tests
 
-One portable YAML format (`tui-lab/v1`) runnable from the CLI, MCP (`tui_run_test`), and SDKs.
+Suites are plain YAML files in one portable format (`tui-lab/v1`). The same
+file runs from the CLI (`tuilab run`), from an agent over MCP
+(`tui_run_test`), and from any SDK — so write once, run anywhere. A suite
+names the app to launch, the steps to perform, and the assertions that must
+hold; the engine handles PTYs, timing, and cleanup.
 
 <Example title="Minimal suite" description="Launches any terminal app, waits for each screen, asserts, and quits cleanly.">
 
-```yaml
-schema: tui-lab/v1
+<Snippet label="tests/navigation.yaml" code={`schema: tui-lab/v1
 name: Navigation Test
 application:
   command: "./myapp"
@@ -30,8 +34,7 @@ steps:
 cleanup:
   - press: q
 assertions:
-  - exit_code: 0
-```
+  - exit_code: 0`} />
 
 </Example>
 

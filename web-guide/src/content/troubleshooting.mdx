@@ -1,44 +1,91 @@
 import { Callout } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
+import { StepBlock, StepDescription } from '../components/step-block';
 
 # Troubleshooting
 
-Something red? Work through this list top to bottom — it covers nearly every failure users hit.
+Something red? Don't guess — diagnose. Every `tuilab run` ends with an exit
+code that tells you which section below to read, and every failure ships with
+a bundle of evidence (screens, input history, diffs) so you can see exactly
+what the engine saw.
 
-## Install problems
+## Quick diagnosis
 
-**`tuilab` not found after install.** Close and reopen your terminal (PATH refresh), then `tuilab --version`. The `pip`/`uv` install puts both `tuilab` and `tuilab-mcp` on PATH; the npm route exposes them via `npx @tui-lab/cli`.
+| What you see | Exit code | Go to |
+|--------------|-----------|-------|
+| `tuilab` command not found | — | Install problems |
+| App never starts | 3 | The app won't launch |
+| Run hangs, then dies | 4 | Hangs and timeouts |
+| Passes sometimes, fails sometimes | 1 | Flaky snapshots |
+| Wrong text on screen | 1 | Reports and failure bundles |
 
-**Wrong binary for the OS.** Each installer is platform-specific (Windows x64, Linux x64, macOS arm64). If you copied an install across machines, reinstall on the target machine instead.
+<StepBlock step={1} title="Install problems">
 
-## The app won't launch (exit 3)
+<StepDescription>The engine isn't on PATH yet, or the wrong platform binary was installed.</StepDescription>
 
-- Check the `command` path in your suite — relative paths resolve from `cwd`, which must sit inside your project folder.
-- Make sure the app actually starts non-interactively: run its command by hand once and confirm it paints without extra input.
-- Set `TERM=xterm-256color` (the default in `tuilab.yaml`) unless your app needs a different terminal type.
+**`tuilab` not found after install.** Close and reopen your terminal so PATH
+refreshes, then run `tuilab --version`. The `pip`/`uv` install puts both
+`tuilab` and `tuilab-mcp` on PATH; the npm route exposes them through
+`npx @tui-lab/cli`. If the version prints, you're good — move to step 2.
 
-## Hangs and timeouts (exit 4)
+**Wrong binary for the OS.** Each installer is platform-specific (Windows x64,
+Linux x64, macOS arm64). If you copied an install across machines, reinstall
+on the target machine instead of copying files over.
 
-The app never painted the waited text. Usual causes:
+</StepBlock>
 
-1.  A missing `wait_for_text` after a state-changing step — every `press`/`type` that changes the screen needs one.
-2.  Too-tight `timeout:` on launch or first paint — be generous there, strict later.
-3.  Wrong terminal size — some apps redraw or paginate at 80x24 vs 120x40; match `default_terminal` to how you run the app by hand.
+<StepBlock step={2} title="The app won't launch" tag="exit 3">
 
-## Flaky snapshots
+<StepDescription>The engine couldn't start your app at all. Check these in order:</StepDescription>
 
-Mask everything volatile: clocks, PIDs, durations, random IDs — see Assertions & snapshots. An unmasked golden flakes the moment any of those change.
+- **Command path.** Relative paths in your suite resolve from `cwd`, which
+  must sit inside your project folder. Try the absolute path first — if that
+  works, fix the relative one.
+- **Starts by hand?** Run the app's command yourself, with no input. It must
+  paint its first screen on its own; if it waits for input before painting,
+  add that input to your suite's `setup`.
+- **Terminal type.** Keep `TERM=xterm-256color` (the `tuilab.yaml` default)
+  unless your app documents a different requirement.
+
+</StepBlock>
+
+<StepBlock step={3} title="Hangs and timeouts" tag="exit 4">
+
+<StepDescription>The app started but never painted the waited text. Three usual causes:</StepDescription>
+
+1.  **Missing wait.** Every `press`/`type` that changes the screen needs a
+    `wait_for_text` after it. Await the *next* screen, not the current one.
+2.  **Too-tight timeout.** Be generous on launch and first paint (5–10s),
+    strict on steady-state steps (1–2s). Tune per step with `timeout:`.
+3.  **Wrong terminal size.** Some apps redraw or paginate at 80x24 vs 120x40.
+    Match `default_terminal` to how you run the app by hand.
+
+</StepBlock>
+
+<StepBlock step={4} title="Flaky snapshots" tag="exit 1, sometimes">
+
+<StepDescription>Passes sometimes, fails sometimes, nothing changed? Volatile content leaked into a golden.</StepDescription>
+
+Mask everything that moves between runs — clocks, PIDs, durations, random
+IDs — with `mask:` rules (see Assertions & snapshots). Re-run three times;
+if all three pass, the flake is dead.
+
+</StepBlock>
 
 ## Reports and failure bundles
 
-Every failure captures screens, input history, and snapshot diffs:
+When text assertions fail (exit 1 with the app running fine), don't re-run
+blind — read the evidence. Every failure captures screens, input history,
+and snapshot diffs:
 
-```bash
-# Step 1: read the structured failure
+<Snippet label="bash" code={`# Step 1: read the structured failure
 tuilab debug reports/results.json
 
 # Step 2: open the visual diff
-tuilab report --format html
-```
+tuilab report --format html`} />
+
+The HTML report shows the expected vs actual screens side by side; `debug`
+prints the same bundle as text for terminals and agent loops.
 
 ## Windows tips
 
@@ -46,5 +93,7 @@ tuilab report --format html
 
 ## Still stuck?
 
-- **MCP launch rejected?** The command must match `security.allow_commands` and `cwd` must sit under the project root.
-- Open an issue at `github.com/soubhagya2001/TUI-Lab` with your suite file, the exit code, and `reports/results.json`.
+- **MCP launch rejected?** The command must match `security.allow_commands`
+  in `tuilab.yaml`, and `cwd` must sit under the project root.
+- Open an issue at `github.com/soubhagya2001/TUI-Lab` with your suite file,
+  the exit code, and `reports/results.json` attached.
