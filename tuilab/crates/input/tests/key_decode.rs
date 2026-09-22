@@ -1,6 +1,13 @@
 //! Key-decoding matrix: every sequence decodes and round-trips.
 
-use tui_lab_input::{decode_key, encode_key, Key};
+use tui_lab_input::{decode_key, encode_key, Decode, Key};
+
+fn key(bytes: &[u8]) -> (Key, usize) {
+    match decode_key(bytes) {
+        Decode::Key(key, len) => (key, len),
+        other => panic!("expected key, got {other:?}"),
+    }
+}
 
 #[test]
 fn arrows_home_end_backtab() {
@@ -14,7 +21,7 @@ fn arrows_home_end_backtab() {
         (b"\x1b[Z".as_slice(), "BACKTAB"),
     ];
     for (bytes, name) in cases {
-        assert_eq!(decode_key(bytes), Some((Key::Named(name), 3)), "{name}");
+        assert_eq!(key(bytes), (Key::Named(name), 3), "{name}");
     }
 }
 
@@ -29,28 +36,43 @@ fn tilde_and_ss3_function_keys() {
         (b"\x1b[24~".as_slice(), "F12", 5),
     ];
     for (bytes, name, len) in cases {
-        assert_eq!(decode_key(bytes), Some((Key::Named(name), len)), "{name}");
+        assert_eq!(key(bytes), (Key::Named(name), len), "{name}");
     }
 }
 
 #[test]
 fn singles_modifiers_and_text() {
-    assert_eq!(decode_key(b"\r"), Some((Key::Named("ENTER"), 1)));
-    assert_eq!(decode_key(b"\t"), Some((Key::Named("TAB"), 1)));
-    assert_eq!(decode_key(b"q"), Some((Key::Char('q'), 1)));
-    assert_eq!(decode_key(b"/"), Some((Key::Char('/'), 1)));
-    assert_eq!(decode_key(b"\x03"), Some((Key::Ctrl('C'), 1)));
-    assert_eq!(decode_key(b"\x1bx"), Some((Key::Alt('x'), 2)));
-    assert_eq!(decode_key("é".as_bytes()), Some((Key::Char('é'), 2)));
+    assert_eq!(key(b"\r"), (Key::Named("ENTER"), 1));
+    assert_eq!(key(b"\t"), (Key::Named("TAB"), 1));
+    assert_eq!(key(b"q"), (Key::Char('q'), 1));
+    assert_eq!(key(b"/"), (Key::Char('/'), 1));
+    assert_eq!(key(b"\x03"), (Key::Ctrl('C'), 1));
+    assert_eq!(key(b"\x1bx"), (Key::Alt('x'), 2));
+    assert_eq!(key("é".as_bytes()), (Key::Char('é'), 2));
 }
 
 #[test]
 fn incomplete_sequences_wait_for_more() {
-    assert_eq!(decode_key(b""), None);
-    assert_eq!(decode_key(b"\x1b"), None);
-    assert_eq!(decode_key(b"\x1b["), None);
-    assert_eq!(decode_key(b"\x1bO"), None);
-    assert_eq!(decode_key(b"\x1b[2"), None);
+    assert_eq!(decode_key(b""), Decode::Incomplete);
+    assert_eq!(decode_key(b"\x1b"), Decode::Incomplete);
+    assert_eq!(decode_key(b"\x1b["), Decode::Incomplete);
+    assert_eq!(decode_key(b"\x1bO"), Decode::Incomplete);
+    assert_eq!(decode_key(b"\x1b[2"), Decode::Incomplete);
+    assert_eq!(decode_key(b"\x1b[?25"), Decode::Incomplete);
+}
+
+#[test]
+fn unknown_sequences_skip_instead_of_poisoning_carry() {
+    // R2: complete-but-unknown input is dropped (forwarded verbatim by the
+    // caller), never accumulated.
+    assert_eq!(decode_key(b"\x1b[X"), Decode::Skip(3));
+    assert_eq!(decode_key(b"\x1b[?25h"), Decode::Skip(6));
+    assert_eq!(decode_key(b"\x1b[999~"), Decode::Skip(6));
+    assert_eq!(decode_key(b"\x1bOX"), Decode::Skip(3));
+    // Absurdly long parameter runs are capped, not carried forever.
+    let mut long = b"\x1b[".to_vec();
+    long.extend([b'1'; 64]);
+    assert_eq!(decode_key(&long), Decode::Skip(16));
 }
 
 #[test]
@@ -68,14 +90,44 @@ fn decoded_keys_reencode_to_the_same_bytes() {
         b"\x1b[Z",
     ];
     for sample in samples {
-        let (key, len) = decode_key(sample).expect("decodes");
+        let (k, len) = key(sample);
         assert_eq!(len, sample.len());
-        let name = match key {
+        let name = match k {
             Key::Named(name) => name.to_string(),
             Key::Char(c) => c.to_string(),
             Key::Ctrl(c) => format!("CTRL+{c}"),
             Key::Alt(c) => format!("ALT+{c}"),
         };
         assert_eq!(encode_key(&name).expect("encodes").as_slice(), *sample);
+    }
+}
+
+#[test]
+fn fuzzed_bytes_never_grow_carry_without_bound() {
+    // R2: deterministic pseudo-fuzz over byte soup, drained recorder-style.
+    // Incomplete tails (partial ESC/UTF-8) are the only legal residue.
+    let mut state: u32 = 0x1234_5678;
+    let mut next_byte = || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        (state & 0xFF) as u8
+    };
+    let mut carry: Vec<u8> = Vec::new();
+    for _ in 0..50_000 {
+        carry.push(next_byte());
+        let mut offset = 0;
+        while offset < carry.len() {
+            match decode_key(&carry[offset..]) {
+                Decode::Incomplete => break,
+                Decode::Key(_, len) | Decode::Skip(len) => offset += len,
+            }
+        }
+        carry.drain(..offset);
+        assert!(
+            carry.len() < 32,
+            "carry must stay bounded, got {}",
+            carry.len()
+        );
     }
 }

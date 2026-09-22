@@ -298,3 +298,22 @@ fn bad_default_timeout_is_config_error() {
     assert_eq!(output.status.code(), Some(2), "bad timeout exits 2");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn oversized_parallel_warns_and_clamps() {
+    // R9: `--parallel 99` warns on stderr, clamps to the cap, still runs.
+    let dir = scratch("clamp");
+    let suite = write(&dir, "green.yaml", &green_suite(&fixture_bin()));
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .arg("--parallel")
+        .arg("99")
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "clamped run still passes");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("clamped"), "warns on stderr: {stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

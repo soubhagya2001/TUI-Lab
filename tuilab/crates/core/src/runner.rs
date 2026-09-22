@@ -503,19 +503,23 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
             assert_poll(session, assertion).await?
         }
         Step::AssertRegion(region) => {
-            let screen = pump(session);
-            let area: String = screen
-                .lines()
-                .skip(region.y as usize)
-                .take(region.height as usize)
-                .map(|line| {
-                    line.chars()
-                        .skip(region.x as usize)
-                        .take(region.width as usize)
-                        .collect::<String>()
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+            // R3: cell-scoped extraction with named-bounds errors (OOB is a
+            // step failure with evidence, not an infra abort).
+            pump(session);
+            let area = match session.emu.region_text(
+                region.x as usize,
+                region.y as usize,
+                region.width as usize,
+                region.height as usize,
+            ) {
+                Ok(area) => area,
+                Err(bounds) => {
+                    return Ok(StepOutcome {
+                        passed: false,
+                        detail: format!("assert_region out of bounds: {bounds}"),
+                    })
+                }
+            };
             StepOutcome {
                 passed: area.contains(&region.contains),
                 detail: if area.contains(&region.contains) {

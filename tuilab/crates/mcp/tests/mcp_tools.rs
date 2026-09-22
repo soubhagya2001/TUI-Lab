@@ -476,6 +476,49 @@ async fn zero_wait_timeout_falls_back_to_default() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn idle_sessions_reaped_on_tool_entry() {
+    // R10: the reaper runs on every tool entry, not just launches — an
+    // untouched session past the idle timeout is gone at the next call.
+    let root = scratch_root("reap");
+    let allow = Allowlist::from_sources(&[".*"]).expect("permissive");
+    let handler = TuiLabHandler::with_idle(root, allow, std::time::Duration::from_millis(100));
+    let id = handler
+        .tui_launch(Parameters(LaunchParams {
+            command: fixture_bin(),
+            args: vec![],
+            cwd: None,
+            width: 120,
+            height: 40,
+            env: Default::default(),
+        }))
+        .await
+        .expect("launch")
+        .0
+        .session_id;
+    // Fresh session serves fine.
+    handler
+        .tui_screen(Parameters(ScreenParams {
+            session_id: id.clone(),
+            styled: false,
+        }))
+        .await
+        .expect("fresh session serves");
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    // Past idle: the next tool entry reaps first, so the read fails.
+    let err = match handler
+        .tui_screen(Parameters(ScreenParams {
+            session_id: id,
+            styled: false,
+        }))
+        .await
+    {
+        Ok(_) => panic!("idle session must be reaped"),
+        Err(err) => err,
+    };
+    assert!(err.contains("unknown session"), "{err}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mode_b_runs_yaml_suite() {
     let (handler, root) = open_handler("mode-b");
     // Mode B resolves suites under the handler root; the test writes its own

@@ -362,3 +362,37 @@ assertions:
         result.steps[1].detail
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn oob_region_fails_with_named_bounds() {
+    // R3: an out-of-bounds region is a step failure naming the grid — not
+    // an infra abort, not a misleading empty mismatch.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: oob-region
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - assert_region:
+      x: 500
+      y: 0
+      width: 10
+      height: 1
+      contains: "x"
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed);
+    let failure = result.failure.expect("failure recorded");
+    assert!(
+        failure.expected.contains("outside 120x40"),
+        "{}",
+        failure.expected
+    );
+}

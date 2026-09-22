@@ -8,7 +8,7 @@ pub mod error;
 pub mod mouse;
 pub mod utils;
 
-pub use decode::{decode_key, Key};
+pub use decode::{decode_key, Decode, Key};
 pub use encoding::{encode_key, encode_text};
 pub use mouse::{
     mouse_drag, mouse_press, mouse_release, mouse_scroll_down, mouse_scroll_up, MouseButton,

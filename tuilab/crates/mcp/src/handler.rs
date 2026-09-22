@@ -45,6 +45,8 @@ pub struct HandlerState {
     pub root: PathBuf,
     /// Launch allowlist.
     pub allow: Allowlist,
+    /// Idle timeout for opportunistic GC (R10).
+    pub idle: Duration,
 }
 
 /// `tuilab-mcp` request handler.
@@ -57,15 +59,30 @@ pub struct TuiLabHandler {
 impl TuiLabHandler {
     /// Build a handler rooted at `root` with the given allowlist.
     pub fn new(root: PathBuf, allow: Allowlist) -> Self {
+        Self::with_idle(root, allow, Duration::from_secs(IDLE_REAP_SECS))
+    }
+
+    /// Build a handler with an explicit idle timeout (tests use short ones).
+    pub fn with_idle(root: PathBuf, allow: Allowlist, idle: Duration) -> Self {
         let state = Arc::new(tokio::sync::Mutex::new(HandlerState {
             registry: SessionRegistry::with_cap(MAX_SESSIONS),
             root,
             allow,
+            idle,
         }));
         Self {
             state,
             tool_router: Self::tool_router(),
         }
+    }
+
+    /// Opportunistic GC (R10): reap idle sessions on every tool entry, so
+    /// abandoned sessions die without waiting for the next launch. Takes
+    /// the lock only for the fast synchronous sweep.
+    async fn reap(&self) {
+        let mut state = self.state.lock().await;
+        let idle = state.idle;
+        state.registry.reap_idle(idle);
     }
 
     /// Expose the router for `list_all` introspection (tests, diagnostics).
@@ -96,15 +113,13 @@ impl TuiLabHandler {
         params: Parameters<LaunchParams>,
     ) -> Result<Json<LaunchOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         state
             .allow
             .check(&params.command, &params.args)
             .map_err(|e| tool_error("launch", e))?;
         let cwd = jail(&state.root, params.cwd.as_deref()).map_err(|e| tool_error("launch", e))?;
-        state
-            .registry
-            .reap_idle(Duration::from_secs(IDLE_REAP_SECS));
         let id = state
             .registry
             .spawn(NewSession::new(SpawnOptions {
@@ -138,6 +153,7 @@ impl TuiLabHandler {
         params: Parameters<PressParams>,
     ) -> Result<Json<PressOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
             .registry
@@ -166,6 +182,7 @@ impl TuiLabHandler {
     )]
     pub async fn tui_type(&self, params: Parameters<TypeParams>) -> Result<Json<TypeOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
             .registry
@@ -198,6 +215,7 @@ impl TuiLabHandler {
         params: Parameters<ScreenParams>,
     ) -> Result<Json<ScreenOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
             .registry
@@ -255,8 +273,10 @@ impl TuiLabHandler {
         let start = std::time::Instant::now();
         let mut last_screen = String::new();
         let mut found = false;
+        self.reap().await;
         while start.elapsed() < timeout {
             // Short critical section: pump under the lock, match + sleep outside.
+            // (Entry reap above covers GC; reaping per tick would churn.)
             let text = {
                 let mut state = self.state.lock().await;
                 let session = state
@@ -290,6 +310,7 @@ impl TuiLabHandler {
         params: Parameters<AssertParams>,
     ) -> Result<Json<AssertOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
             .registry
@@ -316,6 +337,7 @@ impl TuiLabHandler {
         params: Parameters<SnapshotParams>,
     ) -> Result<Json<SnapshotOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
             .registry
@@ -354,6 +376,7 @@ impl TuiLabHandler {
         params: Parameters<RunTestParams>,
     ) -> Result<Json<RunTestOut>, String> {
         let params = params.0;
+        self.reap().await;
         let state = self.state.lock().await;
         // S3: confine the suite file under the project root (no traversal).
         let suite_path =
@@ -411,6 +434,7 @@ impl TuiLabHandler {
         params: Parameters<CloseParams>,
     ) -> Result<Json<CloseOut>, String> {
         let params = params.0;
+        self.reap().await;
         let mut state = self.state.lock().await;
         let closed = state
             .registry

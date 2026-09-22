@@ -71,32 +71,53 @@ assertions:
   - exit_code: 0
 "#;
 
-/// Collect suite files: a single file, or all `*.yaml` under a directory
-/// (recursive, sorted, so `tuilab run` finds every suite).
+/// Collect suite files: a single file, or all `*.yaml`/`*.yml` under a
+/// directory (recursive, sorted, so `tuilab run` finds every suite).
 fn collect_suites(path: &Path) -> Result<Vec<PathBuf>, String> {
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
     }
     if path.is_dir() {
         let mut files = Vec::new();
-        collect_yaml_recursive(path, &mut files)?;
+        let mut seen = Vec::new();
+        collect_yaml_recursive(path, &mut files, &mut seen)?;
         files.sort();
+        files.dedup();
         return Ok(files);
     }
     Err(format!("no such file or directory: {}", path.display()))
 }
 
-/// Depth-first `*.yaml` collection.
-fn collect_yaml_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+/// Depth-first suite collection.
+///
+/// R9: accepts `.yaml` and `.yml` (case-insensitive); canonicalizes every
+/// directory to break symlink cycles and dedupes files reached twice.
+fn collect_yaml_recursive(
+    dir: &Path,
+    out: &mut Vec<PathBuf>,
+    seen: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    let canonical = dir
+        .canonicalize()
+        .map_err(|e| format!("read {}: {e}", dir.display()))?;
+    if seen.contains(&canonical) {
+        return Ok(());
+    }
+    seen.push(canonical);
     let entries = std::fs::read_dir(dir).map_err(|e| format!("read {}: {e}", dir.display()))?;
     for entry in entries {
         let item = entry
             .map_err(|e| format!("read {}: {e}", dir.display()))?
             .path();
-        if item.is_file() && item.extension().is_some_and(|ext| ext == "yaml") {
-            out.push(item);
+        if item.is_file() {
+            let yaml = item.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml")
+            });
+            if yaml {
+                out.push(item);
+            }
         } else if item.is_dir() {
-            collect_yaml_recursive(&item, out)?;
+            collect_yaml_recursive(&item, out, seen)?;
         }
     }
     Ok(())
@@ -143,9 +164,15 @@ pub async fn run(
 
     let mut results = Vec::new();
     let mut exit = EXIT_OK;
-    let mut slots = parallel
-        .unwrap_or(config.parallel)
-        .clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
+    let requested = parallel.unwrap_or(config.parallel);
+    let mut slots = requested.clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
+    // R9: clamping is visible, never silent.
+    if slots != requested {
+        eprintln!(
+            "warning: parallel slots clamped to {slots} (registry cap {})",
+            tui_lab_core::sessions::DEFAULT_MAX_SESSIONS
+        );
+    }
     if step_mode && slots != 1 {
         // Pausing across parallel tasks on shared stdin is incoherent.
         eprintln!("--step implies sequential runs (slots forced to 1)");
@@ -393,5 +420,51 @@ mod tests {
             exit_for(&E::Message("timed out waiting".into())),
             EXIT_TESTS_FAILED
         );
+    }
+
+    /// R9: `.yaml` + `.yml` discovered, others ignored.
+    #[test]
+    fn discovery_accepts_both_yaml_extensions() {
+        let dir = std::env::temp_dir().join(format!("tuilab-discover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("nested")).expect("scratch");
+        for name in ["a.yaml", "b.yml", "c.txt", "nested/d.yaml"] {
+            std::fs::write(dir.join(name), "x").expect("suite file");
+        }
+        let mut found: Vec<String> = collect_suites(&dir)
+            .expect("collect")
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&dir)
+                    .expect("under root")
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        found.sort();
+        assert_eq!(found, ["a.yaml", "b.yml", "nested/d.yaml"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// R9: symlink cycles terminate instead of recursing forever.
+    #[test]
+    fn discovery_survives_symlink_cycles() {
+        let dir = std::env::temp_dir().join(format!("tuilab-cycle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sub = dir.join("sub");
+        std::fs::create_dir_all(&sub).expect("scratch");
+        std::fs::write(dir.join("a.yaml"), "x").expect("suite file");
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_dir(&dir, sub.join("loop"));
+        #[cfg(not(windows))]
+        let linked = std::os::unix::fs::symlink(&dir, sub.join("loop"));
+        if linked.is_err() {
+            eprintln!("warning: symlinks need privilege; skipping cycle test");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let found = collect_suites(&dir).expect("collect terminates");
+        assert_eq!(found.len(), 1, "no duplicates through the loop");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

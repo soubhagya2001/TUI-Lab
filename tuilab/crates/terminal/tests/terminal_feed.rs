@@ -118,3 +118,18 @@ fn cells_skip_trailing_padding() {
     assert_eq!(cells.len(), 2);
     assert!(cells.iter().all(|cell| cell.y == 0));
 }
+
+#[test]
+fn region_text_counts_cells_and_names_oob_bounds() {
+    // R3: wide chars occupy two cells; the spacer is skipped so CJK reads
+    // as characters, and out-of-bounds names the grid size.
+    let (mut emu, _) = harness(20, 5);
+    emu.feed("日本AB".as_bytes());
+    let area = emu.region_text(0, 0, 6, 1).expect("in bounds");
+    assert!(area.contains("日本"), "{area:?}");
+    assert!(area.contains('A') && area.contains('B'), "{area:?}");
+    let err = emu.region_text(18, 0, 5, 1).expect_err("cols OOB");
+    assert!(err.contains("20x5"), "{err}");
+    let err = emu.region_text(0, 5, 1, 1).expect_err("rows OOB");
+    assert!(err.contains("20x5"), "{err}");
+}

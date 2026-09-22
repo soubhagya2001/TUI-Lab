@@ -71,7 +71,7 @@ assertions:
 | `sleep` | `"500ms"` | Escape hatch only (flaky, discouraged) |
 | `resize` | `{ width, height }` | e.g. 80x24, 120x40, 160x50, 40x15 |
 | `assert_text` / `expect` | `{ contains/not_contains/regex/exact_text/cursor/exit_code/not_crashed/screen_changed/timeout }` | Polls to `timeout`; see `06` |
-| `assert_region` | `{ x,y,width,height, contains }` | Scoped text check |
+| `assert_region` | `{ x,y,width,height, contains }` | Cell-scoped; OOB names the grid size |
 | `assert_exit_code` / `exit_code` | `0` | Post-cleanup |
 | `snapshot` / `screenshot` | `{ name, mask? }` | Golden-file compare |
 | `wait_for_exit` | `{ timeout }` | For quit flows |

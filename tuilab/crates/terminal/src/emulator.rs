@@ -128,6 +128,42 @@ impl Emulator {
         (self.term.columns(), self.term.screen_lines())
     }
 
+    /// Cell-scoped text for `assert_region` (R3).
+    ///
+    /// Coordinates are display cells (columns/rows), matching the geometry
+    /// users see. Wide characters occupy two cells; the spacer cell is
+    /// skipped so `"日本"` in 4 columns reads as two chars, not four.
+    /// Out-of-bounds regions are an error naming the bounds (never a
+    /// misleading empty mismatch).
+    pub fn region_text(
+        &self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> Result<String, String> {
+        let (cols, rows) = self.dims();
+        if x + width > cols || y + height > rows {
+            return Err(format!(
+                "region ({x},{y}) {width}x{height} outside {cols}x{rows}"
+            ));
+        }
+        let grid = self.term.grid();
+        let mut lines = Vec::with_capacity(height);
+        for row in y..y + height {
+            let mut line = String::new();
+            for col in x..x + width {
+                let cell = &grid[Line(row as i32)][Column(col)];
+                if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                    continue;
+                }
+                line.push(cell.c);
+            }
+            lines.push(line);
+        }
+        Ok(lines.join("\n"))
+    }
+
     /// Styled grid dump, row-major (excludes trailing blank padding per row
     /// like [`Emulator::text`], so snapshots stay compact).
     pub fn cells(&self) -> Vec<StyledCell> {

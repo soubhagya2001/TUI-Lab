@@ -16,7 +16,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use tui_lab_core::{NewSession, SessionRegistry};
-use tui_lab_input::{decode_key, Key};
+use tui_lab_input::{decode_key, Decode, Key};
 use tui_lab_protocol::{Step, SuiteAssertion, TestFile, WaitForText};
 use tui_lab_pty::SpawnOptions;
 
@@ -149,9 +149,16 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
         last_stable = settled;
         // Parse complete keys; the incomplete tail goes back to the front
         // of the buffer for the next beat. Original bytes are forwarded
-        // verbatim so replay matches the session byte-for-byte.
+        // verbatim so replay matches the session byte-for-byte. Unknown
+        // sequences (R2: `Decode::Skip`) are forwarded too but emit no
+        // step — and never accumulate in `carry`.
         let mut offset = 0;
-        while let Some((key, len)) = decode_key(&beat[offset..]) {
+        loop {
+            let (key, len) = match decode_key(&beat[offset..]) {
+                Decode::Incomplete => break,
+                Decode::Skip(len) => (None, len),
+                Decode::Key(key, len) => (Some(key), len),
+            };
             let raw = beat[offset..offset + len].to_vec();
             offset += len;
             if let Ok(session) = registry.get_mut(&id) {
@@ -162,6 +169,7 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
                     return EXIT_PTY_ERROR;
                 }
             }
+            let Some(key) = key else { continue };
             match key {
                 Key::Char(c) => type_run.push(c),
                 Key::Named(name) => {
