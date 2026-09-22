@@ -5,6 +5,7 @@ import { mdxComponents } from '@/components/mdx'
 import { GUIDE_ROUTES } from '@/lib/nav'
 import { ThemeProvider } from '@/lib/theme'
 import { Home } from '@/pages/home'
+import { NotFound } from '@/pages/not-found'
 import AssertionsSnapshots from '@/content/assertions-snapshots.mdx'
 import CliReference from '@/content/cli-reference.mdx'
 import GettingStarted from '@/content/getting-started.mdx'
@@ -42,7 +43,7 @@ export function App() {
               {GUIDE_ROUTES.filter((route) => route.path !== '/').map((route) => (
                 <Route key={route.path} path={route.path} element={<Chapter path={route.path} />} />
               ))}
-              <Route path="*" element={<Home />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </HashRouter>

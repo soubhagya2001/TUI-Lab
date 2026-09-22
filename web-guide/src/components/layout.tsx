@@ -1,37 +1,44 @@
 import { MailIcon, MenuIcon, MoonIcon, SearchIcon, SquareTerminalIcon, SunIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { GUIDE_ROUTES } from '@/lib/nav'
+import { GUIDE_ROUTES, NAV_SECTIONS } from '@/lib/nav'
 import { searchGuide } from '@/lib/search'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav aria-label="Guide chapters" className="flex flex-col gap-1 p-3">
-      {GUIDE_ROUTES.map((route) => (
-        <NavLink
-          key={route.path}
-          to={route.path}
-          end={route.path === '/'}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
-              isActive
-                ? 'bg-accent font-medium text-accent-foreground'
-                : 'text-muted-foreground',
-            )
-          }
-        >
-          {route.title}
-        </NavLink>
+    <nav aria-label="Guide chapters" className="flex flex-col gap-4 p-3">
+      {NAV_SECTIONS.map((section) => (
+        <div key={section.label} className="flex flex-col gap-1">
+          <span className="px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {section.label}
+          </span>
+          {section.routes.map((route) => (
+            <NavLink
+              key={route.path}
+              to={route.path}
+              end={route.path === '/'}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
+                  isActive
+                    ? 'bg-accent font-medium text-accent-foreground'
+                    : 'text-muted-foreground',
+                )
+              }
+            >
+              {route.title}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </nav>
   )
@@ -39,21 +46,44 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 import type { SearchEntry } from '@/lib/search'
 
+function highlightMatch(title: string, query: string) {
+  const text = query.trim()
+  if (text.length < 2) return title
+  const index = title.toLowerCase().indexOf(text.toLowerCase())
+  if (index < 0) return title
+  return (
+    <>
+      {title.slice(0, index)}
+      <mark className="rounded-sm bg-primary/25 text-inherit">
+        {title.slice(index, index + text.length)}
+      </mark>
+      {title.slice(index + text.length)}
+    </>
+  )
+}
+
 function SearchBox() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [results, setResults] = useState<SearchEntry[]>([])
+  const [active, setActive] = useState(0)
+  const [searched, setSearched] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
+    setActive(0)
     if (query.trim().length < 2) {
       setResults([])
+      setSearched(false)
       return
     }
     const timer = setTimeout(() => {
       void searchGuide(query).then((hits) => {
-        if (!cancelled) setResults(hits)
+        if (cancelled) return
+        setResults(hits)
+        setSearched(true)
       })
     }, 150)
     return () => {
@@ -70,6 +100,17 @@ function SearchBox() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
+  const go = (path: string) => {
+    setOpen(false)
+    setQuery('')
+    navigate(path)
+  }
+
+  // The panel mounts only once there is something to show — results or
+  // the searched empty state — so it never flashes as an empty box while
+  // the debounced search is still running.
+  const showDropdown = open && query.trim().length >= 2 && (results.length > 0 || searched)
+
   return (
     <div ref={boxRef} className="relative w-full max-w-xs">
       <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -80,29 +121,56 @@ function SearchBox() {
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' && results.length > 0) {
+            event.preventDefault()
+            setOpen(true)
+            setActive((index) => (index + 1) % results.length)
+          } else if (event.key === 'ArrowUp' && results.length > 0) {
+            event.preventDefault()
+            setActive((index) => (index - 1 + results.length) % results.length)
+          } else if (event.key === 'Enter' && open && results[active]) {
+            go(results[active].path)
+          } else if (event.key === 'Escape') {
+            setOpen(false)
+          }
+        }}
         placeholder="Search the guide…"
         aria-label="Search the guide"
+        role="combobox"
+        aria-expanded={showDropdown}
+        aria-controls="guide-search-results"
+        aria-activedescendant={results[active] ? `guide-search-${results[active].path}` : undefined}
         className="pl-9"
       />
-      {open && results.length > 0 && (
+      {showDropdown && (
         <div
+          id="guide-search-results"
           data-testid="search-results"
+          role="listbox"
+          aria-label="Search suggestions"
           className="absolute top-full z-50 mt-1 w-full overflow-hidden rounded-lg border bg-popover shadow-lg"
         >
-          {results.map((result) => (
+          {results.map((result, index) => (
             <Link
               key={result.path}
+              id={`guide-search-${result.path}`}
+              role="option"
+              aria-selected={index === active}
               to={result.path}
-              onClick={() => {
-                setOpen(false)
-                setQuery('')
-              }}
-              className="block px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              onMouseEnter={() => setActive(index)}
+              onClick={() => go(result.path)}
+              className={index === active ? 'block bg-accent px-3 py-2 text-sm text-accent-foreground' : 'block px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground'}
             >
-              <span className="font-medium">{result.title}</span>
+              <span className="font-medium">{highlightMatch(result.title, query)}</span>
               <span className="block truncate text-xs text-muted-foreground">{result.text}</span>
             </Link>
           ))}
+          {searched && results.length === 0 && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">
+              No matches for “{query.trim()}”.
+            </p>
+          )}
         </div>
       )}
     </div>

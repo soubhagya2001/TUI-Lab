@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# TUI Lab Developer Guide (`web-guide/`)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + Vite + MDX documentation site for TUI Lab. Deployed to GitHub
+Pages via `.github/workflows/web-guide.yml`.
 
-Currently, two official plugins are available:
+## Develop
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev      # local preview with hot reload
+npm run build    # typecheck + static build to dist/
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Test
+
+```bash
+npm run test:e2e          # Playwright (chromium) against `vite preview`
+npm run test:e2e:headed   # headed mode for debugging
+npm run test:e2e:report   # open the last HTML report
+```
+
+Conventions: shadcn components first (see `.agents/skills/shadcn`),
+`flex` + `gap-*` (never `space-x/y`), semantic color tokens only.
+Content lives in `src/content/*.mdx` (one file per route); shared step and
+terminal components in `src/components/`. Hash routing (`HashRouter`) —
+project Pages serves `index.html` only, so no browser-history fallback.
+
+## Deploy
+
+Push to `main` touching `web-guide/**` (or dispatch manually): the workflow
+builds, runs Playwright, and deploys `dist/` via `actions/deploy-pages`.
+PRs get a build-only check (no deploy).

@@ -44,10 +44,10 @@ test.describe('Guide site', () => {
 
   test('search shows chapter suggestions while typing', async ({ page }) => {
     await page.goto('./')
-    await page.getByRole('textbox', { name: 'Search the guide' }).fill('snapshot')
+    await page.getByRole('combobox', { name: 'Search the guide' }).pressSequentially('snapshot')
     const dropdown = page.getByTestId('search-results')
-    await expect(dropdown).toBeVisible()
-    await expect(dropdown.getByRole('link', { name: /Assertions & snapshots/ })).toBeVisible()
+    await expect(dropdown.getByRole('option').first()).toBeVisible()
+    await expect(dropdown.getByRole('option', { name: /Assertions & snapshots/ })).toBeVisible()
   })
 
   test('prev/next walk the whole guide', async ({ page }) => {
@@ -108,7 +108,9 @@ test.describe('Guide site', () => {
     )
   })
 
-  test('no dead external links', async ({ page, request }) => {
+  test('external links are well-formed (no live GETs)', async ({ page }) => {
+    // D4: link checking must not depend on the network — assert shape.
+    // The footer test already pins the exact contact URLs.
     await page.goto('./')
     const hrefs = await page.locator('a[href]').evaluateAll((links) =>
       [...new Set(links.map((link) => link.getAttribute('href') ?? ''))].filter(Boolean),
@@ -116,8 +118,37 @@ test.describe('Guide site', () => {
     const external = hrefs.filter((href) => href.startsWith('http'))
     expect(external.length).toBeGreaterThan(0)
     for (const href of external) {
-      const response = await request.get(href, { timeout: 15000 })
-      expect(response.ok(), `Dead external link: ${href} returned ${response.status()}`).toBeTruthy()
+      expect(href, `malformed URL: ${href}`).toMatch(/^https:\/\/[A-Za-z0-9.-]+\//)
     }
+  })
+
+  test('search keyboard flow and empty state', async ({ page }) => {
+    await page.goto('./')
+    const box = page.getByRole('combobox', { name: 'Search the guide' })
+    await box.pressSequentially('snapshot')
+    const dropdown = page.getByTestId('search-results')
+    await expect(dropdown.getByRole('option').first()).toBeVisible()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/#\/[a-z-]+$/)
+    // No-match query shows the empty state instead of suggestions.
+    await page.goto('./')
+    await page.getByRole('combobox', { name: 'Search the guide' }).pressSequentially('zzz-no-such-topic')
+    await expect(page.getByTestId('search-results')).toBeVisible()
+    await expect(page.getByTestId('search-results')).toContainText('No matches')
+  })
+
+  test('sidebar groups chapters into sections', async ({ page }) => {
+    await page.goto('./')
+    const nav = page.getByRole('navigation', { name: 'Guide chapters' })
+    for (const section of ['Start', 'Write', 'Reference', 'Help']) {
+      await expect(nav.getByText(section, { exact: true })).toBeVisible()
+    }
+  })
+
+  test('unknown routes show the 404 chapter', async ({ page }) => {
+    await page.goto('./#/no-such-page')
+    await expect(page.getByText('That page isn’t in this guide')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Back to Home' })).toBeVisible()
   })
 })
