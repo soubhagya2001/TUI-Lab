@@ -10,7 +10,7 @@ Assertions run against **terminal state** (grid + cursor + process), not raw byt
 - Screen
   - snapshot (golden compare) / region / dimensions / cursor_position
 - Process
-  - exit_code / crashed / timeout / stderr contains
+  - exit_code / crashed / timeout / stderr contains (future — child `stderr` shares the PTY stream; `portable-pty` 0.9 exposes no stderr redirect, see `11`)
 - Interaction
   - key accepted (screen changed within N ms) / screen changed / focus changed
 - Performance

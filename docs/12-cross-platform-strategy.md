@@ -57,6 +57,16 @@ TUI Lab App
 
 ## 12.3 Mitigations
 
+Proven in CI (Windows + Linux green since Phase 6; see `12.5` for timing rules):
+
+1.  Answer the ConPTY handshake — feed `ESC[6n` replies through the emulator
+    (`Event::PtyWrite` forwarding); never drain without feeding.
+2.  Warm the grid through the emulator on spawn so the first bytes unblock output.
+3.  Set an explicit CWD on every child (ConPTY children don't inherit it).
+4.  Filter `KeyEventKind::Press` only — ConPTY double-fires press/release.
+5.  Kill `SIGHUP`-first on Unix with a bounded grace before SIGKILL.
+6.  Mouse: one write per event, button-coded release, no duplicate presses while held.
+
 ## 12.4 Phase 0 spike findings (Windows, PASS)
 
 Throwaway crate `tuilab/spike-pty` (portable-pty 0.9 + alacritty_terminal 0.26,

@@ -43,6 +43,12 @@ cargo install tui-lab-cli tui-lab-mcp  # Rust — from crates.io
 | `cargo install` | ✓ | ✓ | ✓ | Compiles from source |
 | GitHub Release archives | ✓ | ✓ | ✓ | Manual download, unzip, PATH |
 
+> **Pre-publish note:** the PyPI/npm/crates.io packages go live with the
+> first `vX.Y.Z` tag (see `docs/16-packaging-distribution.md`). Until then,
+> build from source: `cargo run -p tui-lab-cli -- <command>` from `tuilab/`,
+> or install the Python/JS SDKs from this repo — they resolve the workspace
+> `target/debug` binary automatically.
+
 ## 60-second quickstart
 
 ```bash

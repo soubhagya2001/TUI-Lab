@@ -32,7 +32,7 @@ Returns: `{ "session_id": "sess_123", "status": "running", "screen": "Welcome...
 { "action": "press", "session_id": "sess_123", "key": "ENTER" }
 ```
 
-Keys: `ENTER ESC TAB BACKTAB UP DOWN LEFT RIGHT HOME END PGUP PGDN INSERT DELETE F1..F12`, `CTRL+C`, `CTRL+D`, single chars, `ALT+x`. Case-insensitive aliases (`DOWN` = `Down`).
+Keys: `ENTER ESC TAB BACKTAB UP DOWN LEFT RIGHT HOME END PGUP PGDN INSERT DELETE F1..F12`, `CTRL+C`, `CTRL+D`, single chars, `ALT+x`. Case-insensitive aliases (`DOWN` = `Down`). Mouse: `"CLICK x y"`, `"RELEASE x y"`, `"SCROLL_UP/DOWN x y"` (1-based cells, gestures as separate steps).
 
 ### type
 
@@ -66,14 +66,16 @@ Returns:
   "cells": [ { "x": 0, "y": 0, "char": "W", "fg": "white", "bg": "black" } ] }
 ```
 
-`text` = plain-text grid join; `cells` optional (for color/style assertions, snapshots).
+`text` = plain-text grid join; `cells` = per-cell JSON when `styled: true` (for color/style assertions, snapshots).
 
 ### assert
 
 ```json
 { "action": "assert", "session_id": "sess_123",
-  "condition": { "type": "text_visible", "value": "Dashboard" } }
+  "condition": { "type": "text_visible", "text": "Dashboard" } }
 ```
+
+Condition types: `text_visible`, `text_not_visible`, `text_regex`, `exact_text`, `cursor_position`, `screen_changed`, `exit_code`, `not_crashed`, `crashed`.
 
 Full taxonomy in `06-assertion-snapshot-engine.md`.
 
@@ -83,7 +85,7 @@ Full taxonomy in `06-assertion-snapshot-engine.md`.
 { "action": "snapshot", "session_id": "sess_123", "name": "dashboard" }
 ```
 
-Captures text + cell-JSON; compares to `tests/snapshots/<name>/<WxH>.json` with masks.
+Captures text + cell-JSON; compares to `tests/snapshots/<suite>/<name>/<WxH>.txt` with `mask` rules (regex strings, `region:` names).
 
 ### resize
 
@@ -99,7 +101,7 @@ Follow with `wait_for_text` — redraw is async.
 { "action": "close", "session_id": "sess_123", "signal": "q", "timeout_ms": 2000 }
 ```
 
-Sends quit input (or SIGTERM), waits for exit, returns `{ "exit_code": 0, "crashed": false }`.
+Sends quit input (or SIGTERM), waits for exit, returns `{ "exit_code": 0, "crashed": false }`. Nonzero codes are preserved numerically — only signal deaths count as crashed.
 
 ## 4.3 Transports
 
@@ -112,5 +114,5 @@ Sends quit input (or SIGTERM), waits for exit, returns `{ "exit_code": 0, "crash
 
 ## 4.4 Versioning
 
-*   `version: "1.0"` in every test file; unknown fields ignored with warning.
+*   `version: "1.0"` in every test file; unknown fields denied in v1 strict mode (warn-and-ignore only where the spec says so).
 *   Additive changes only within v1. Breaking changes → `tui-lab/v2` + migration note.
