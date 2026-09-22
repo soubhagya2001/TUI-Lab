@@ -13,6 +13,14 @@ GitHub Actions / GitLab / Jenkins
 
 Example assertion in CI: build release binary, then `tuilab run`.
 
+Our own pipeline (`.github/workflows/ci.yml`, P4): `rust` (fmt/clippy/test)
+and `e2e` dogfood run on Windows + Linux + macOS; `sdk-python`/`sdk-js` on
+Windows + Linux; `sdk-rust` and the `schema` gate (every `tests/e2e/*.yaml`
+validated against `schemas/test-schema-v1.json`) on Ubuntu. Rust jobs skip
+web-guide-only pushes (`paths:`), share a `rust-cache`, and cancel stale
+runs via `concurrency`. Every job uploads its `reports/` (results,
+snapshots, failure bundles) as an artifact on failure — never just red logs.
+
 Parallel runs (`--parallel N`) fan suites out over a semaphore (capped by
 the registry limit of 8) with run-all semantics: every suite completes, no
 sibling aborts, and `results.json` / JUnit reassemble in input order so

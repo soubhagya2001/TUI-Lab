@@ -1,8 +1,24 @@
 name: ci
 
+# I5: Rust jobs ignore web-guide-only pushes (the web-guide workflow owns
+# those paths); concurrency cancels stale runs on the same ref.
 on:
   push:
+    paths:
+      - "tuilab/**"
+      - "docs/**"
+      - ".github/workflows/ci.yml"
+      - "Cargo.*"
   pull_request:
+    paths:
+      - "tuilab/**"
+      - "docs/**"
+      - ".github/workflows/ci.yml"
+      - "Cargo.*"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust:
@@ -10,7 +26,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # I1: macOS leg — aarch64-apple-darwin ships, so it tests.
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -20,16 +37,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # I4: failure evidence, not just red logs.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: rust-reports-${{ matrix.os }}
+          path: tuilab/reports/
+          retention-days: 7
 
   e2e:
     name: dogfood e2e (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -37,11 +64,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
       - run: cargo build -p tui-lab-cli
       - run: cargo build --manifest-path tests/fixtures/ratatui-sample/Cargo.toml
       - run: cargo run -p tui-lab-cli -- run tests/e2e --debug
       - run: cargo run -p tui-lab-cli -- run tests/e2e --parallel 2
       - run: cargo test -p tui-lab-mcp --test stdio_probe
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-reports-${{ matrix.os }}
+          path: tuilab/reports/
+          retention-days: 7
+
+  schema:
+    # I2: every committed YAML suite must satisfy the v1 JSON schema.
+    name: suite schema gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          cache-enable: true
+      - name: Validate suites against schema
+        shell: bash
+        run: |
+          for suite in tuilab/tests/e2e/*.yaml; do
+            echo "checking $suite"
+            SUITE="$suite" uvx --with jsonschema --with pyyaml python -c "import json,jsonschema,os,yaml; schema=json.load(open('tuilab/schemas/test-schema-v1.json')); doc=yaml.safe_load(open(os.environ['SUITE'])); jsonschema.validate(doc,schema); print('ok:',os.environ['SUITE'])"
+          done
 
   sdk-python:
     name: python sdk (${{ matrix.os }})
@@ -53,13 +107,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
+          cache-enable: true
       - run: cargo build -p tui-lab-cli
         working-directory: tuilab
       - run: uv run --with pytest python -m pytest tests/ -q
         working-directory: tuilab/sdks/python
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sdk-python-reports-${{ matrix.os }}
+          path: tuilab/sdks/python/reports/
+          retention-days: 7
 
   sdk-js:
     name: js sdk (${{ matrix.os }})
@@ -71,6 +135,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -82,3 +149,31 @@ jobs:
         working-directory: tuilab/sdks/javascript
       - run: npm test
         working-directory: tuilab/sdks/javascript
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sdk-js-reports-${{ matrix.os }}
+          path: tuilab/sdks/javascript/reports/
+          retention-days: 7
+
+  sdk-rust:
+    # I1: the Rust SDK gets its own job (thin sidecar — ubuntu only; engine
+    # coverage comes from the rust/e2e legs).
+    name: rust sdk (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
+      - run: cargo build -p tui-lab-cli
+        working-directory: tuilab
+      - run: cargo test -p tui-lab-sdk
+        working-directory: tuilab
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sdk-rust-reports-ubuntu-latest
+          path: tuilab/sdks/rust/reports/
+          retention-days: 7
