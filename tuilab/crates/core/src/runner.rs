@@ -249,6 +249,8 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         schema: TestFile::schema_id().to_string(),
         suite: file.name.clone(),
         passed,
+        skipped: false,
+        attempts: 1,
         exit_success: Some(status.success()),
         exit_signal: status.signal().map(str::to_string),
         exit_code: Some(exit_code),

@@ -14,6 +14,14 @@ pub struct SuiteResult {
     pub suite: String,
     /// All steps passed and exit assertions held.
     pub passed: bool,
+    /// Skipped via `skip: true`, focus filtering, or tag/shard selection.
+    /// Skipped suites never fail; summaries count them separately.
+    #[serde(default)]
+    pub skipped: bool,
+    /// How many attempts ran (1 + retries). Old results without the field
+    /// read as a single attempt.
+    #[serde(default = "one_attempt")]
+    pub attempts: u32,
     /// Process exit success, if the process ended.
     pub exit_success: Option<bool>,
     /// Termination signal name, if reported (e.g. `SIGKILL`).
@@ -64,6 +72,10 @@ pub struct FailureInfo {
     pub last_screen: String,
     /// Input history up to the failure.
     pub input_history: Vec<String>,
+}
+
+fn one_attempt() -> u32 {
+    1
 }
 
 /// Terminal geometry + type for the run record.

@@ -5,15 +5,14 @@
 
 use std::path::{Path, PathBuf};
 
-use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult};
-use tui_lab_protocol::TestFile;
-use tui_lab_reporter::{load_json_all, write_json_all};
-
 use crate::config::{load, ProjectConfig};
 use crate::constants::{
     CONFIG_FILE, EXIT_CONFIG_ERROR, EXIT_OK, EXIT_PTY_ERROR, EXIT_TESTS_FAILED, EXIT_TIMEOUT,
     TESTS_DIR,
 };
+use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult, TerminalInfo};
+use tui_lab_protocol::TestFile;
+use tui_lab_reporter::{load_json_all, write_json_all};
 
 /// Scaffold `tuilab.yaml` + `tests/smoke.yaml` in `dir`.
 pub fn init(dir: &Path) -> i32 {
@@ -123,18 +122,43 @@ fn collect_yaml_recursive(
     Ok(())
 }
 
+/// Arguments for [`run`] (bundled so the signature stays lint-clean).
+pub struct RunArgs<'a> {
+    /// Suite file or directory (defaults to configured `tests_dir`).
+    pub path: Option<&'a Path>,
+    /// Terminal override, e.g. 120x40.
+    pub terminal_override: Option<(u16, u16)>,
+    /// Print the full failure bundle on failure.
+    pub debug: bool,
+    /// Step-through mode.
+    pub step_mode: bool,
+    /// Parallel slots (default: `tuilab.yaml` `parallel`).
+    pub parallel: Option<usize>,
+    /// Shard selection N/M (both 1-based).
+    pub shard: Option<(usize, usize)>,
+    /// Rerun failed suites up to N extra times.
+    pub retries: usize,
+    /// Run only suites carrying any of these tags.
+    pub tags: &'a [String],
+}
+
 /// Run suites (sequentially or in parallel); returns the CLI exit code.
 ///
-/// `path` defaults to the configured `tests_dir` (`tuilab run` with no args).
-/// `parallel` defaults to the configured slot count; 1 keeps the exact
-/// sequential behavior (including immediate infra-error exits).
-pub async fn run(
-    path: Option<&Path>,
-    terminal_override: Option<(u16, u16)>,
-    debug: bool,
-    step_mode: bool,
-    parallel: Option<usize>,
-) -> i32 {
+/// `parallel` 1 keeps the exact sequential behavior (including immediate
+/// infra-error exits).
+/// `shard` selects the Nth slice of M, `retries` reruns failures,
+/// non-empty `tags` keeps only matching suites.
+pub async fn run(args: RunArgs<'_>) -> i32 {
+    let RunArgs {
+        path,
+        terminal_override,
+        debug,
+        step_mode,
+        parallel,
+        shard,
+        retries,
+        tags,
+    } = args;
     if step_mode {
         eprintln!("step mode: Enter continues each step, q aborts the run");
     }
@@ -162,7 +186,29 @@ pub async fn run(
         }
     };
 
-    let mut results = Vec::new();
+    // Parse everything first so a schema error still exits 2 before anything
+    // launches; then select (skip/focus/tags/shard).
+    let mut pairs = Vec::with_capacity(suites.len());
+    for suite_path in &suites {
+        match load_suite(suite_path, &config, terminal_override, step_mode) {
+            Ok(pair) => pairs.push(pair),
+            Err(code) => return code,
+        }
+    }
+    let (run_list, mut ordered) = select_suites(pairs, tags);
+    // `ordered` carries selection indices so reports reassemble in input
+    // order even when retries land late.
+    if run_list.is_empty() {
+        eprintln!("no suites selected (tags/shard/focus filters)");
+    }
+    let mut run_list = run_list;
+    if let Some((n, m)) = shard {
+        run_list = apply_shard(run_list, n, m);
+        if run_list.is_empty() {
+            eprintln!("no suites in shard {n}/{m}");
+        }
+    }
+
     let mut exit = EXIT_OK;
     let requested = parallel.unwrap_or(config.parallel);
     let mut slots = requested.clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
@@ -179,61 +225,184 @@ pub async fn run(
         slots = 1;
     }
     if slots == 1 {
-        for suite_path in &suites {
-            let (file, opts) = match load_suite(suite_path, &config, terminal_override, step_mode) {
-                Ok(loaded) => loaded,
-                Err(code) => return code,
-            };
-            match run_file_bounded(&file, &opts).await {
-                Ok(result) => {
-                    print_summary(&result);
-                    if debug {
-                        print_debug(&result);
+        for (index, file, opts) in run_list {
+            // Retries rerun failures fresh; only the final attempt lands in
+            // the report (its `attempts` count tells the story). Infra
+            // errors still exit at once — a broken environment won't heal
+            // by retrying.
+            let mut attempt = 0u32;
+            loop {
+                attempt += 1;
+                match run_file_bounded(&file, &opts).await {
+                    Ok(mut result) => {
+                        result.attempts = attempt;
+                        let failed = !result.passed && !result.skipped;
+                        if !failed || attempt > retries as u32 {
+                            print_summary(&result);
+                            if debug {
+                                print_debug(&result);
+                            }
+                            if failed {
+                                exit = EXIT_TESTS_FAILED;
+                            }
+                            ordered.push((index, result));
+                            break;
+                        }
+                        eprintln!("retrying {} (attempt {})", file.name, attempt + 1);
                     }
-                    if !result.passed {
-                        exit = EXIT_TESTS_FAILED;
+                    Err(e) => {
+                        // Infrastructure breakdown: launch/PTY/timeout (exits 3/4).
+                        eprintln!("{}: {e}", file.name);
+                        return exit_for(&e);
                     }
-                    results.push(result);
-                }
-                Err(e) => {
-                    // Infrastructure breakdown: launch/PTY/timeout (exits 3/4).
-                    eprintln!("{}: {e}", suite_path.display());
-                    return exit_for(&e);
                 }
             }
         }
     } else {
-        // Parallel: parse everything first so a schema error still exits 2
-        // before anything launches; then fan out with run-all semantics
-        // (infra errors arrive as failed results, never aborts). Each suite
-        // keeps its wired options (C5: timeouts survive fan-out).
-        let mut files = Vec::with_capacity(suites.len());
-        for suite_path in &suites {
-            match load_suite(suite_path, &config, terminal_override, step_mode) {
-                Ok(loaded) => files.push(loaded),
-                Err(code) => return code,
+        // Parallel fan-out with run-all semantics (infra errors arrive as
+        // failed results, never aborts). Each suite keeps its wired options
+        // (C5: timeouts survive fan-out). Failed suites requeue by pool
+        // position until attempts run out; finals merge back by selection
+        // index so reports stay in input order.
+        let pool: Vec<IndexedSuite> = run_list;
+        let mut pending: Vec<usize> = (0..pool.len()).collect();
+        let mut attempt = 0u32;
+        loop {
+            attempt += 1;
+            let round: Vec<(TestFile, RunOptions)> = pending
+                .iter()
+                .map(|&i| (pool[i].1.clone(), pool[i].2.clone()))
+                .collect();
+            let batch = tui_lab_core::run_suites(round, slots).await;
+            let mut requeue = Vec::new();
+            for (pos, mut result) in batch.into_iter().enumerate() {
+                result.attempts = attempt;
+                let failed = !result.passed && !result.skipped;
+                if failed && attempt <= retries as u32 {
+                    eprintln!("retrying {} (attempt {})", result.suite, attempt + 1);
+                    requeue.push(pending[pos]);
+                    continue;
+                }
+                print_summary(&result);
+                if debug {
+                    print_debug(&result);
+                }
+                if failed {
+                    exit = EXIT_TESTS_FAILED;
+                }
+                ordered.push((pool[pending[pos]].0, result));
             }
-        }
-        for result in tui_lab_core::run_suites(files, slots).await {
-            print_summary(&result);
-            if debug {
-                print_debug(&result);
+            if requeue.is_empty() {
+                break;
             }
-            if !result.passed {
-                exit = EXIT_TESTS_FAILED;
-            }
-            results.push(result);
+            pending = requeue;
         }
     }
+
+    ordered.sort_by_key(|(index, _)| *index);
+    let results: Vec<SuiteResult> = ordered.into_iter().map(|(_, result)| result).collect();
 
     let report_path = PathBuf::from(&config.report.json);
     if let Err(e) = write_json_all(&report_path, &results) {
         eprintln!("write {}: {e}", report_path.display());
         return EXIT_CONFIG_ERROR;
     }
-    let passed = results.iter().filter(|result| result.passed).count();
-    println!("{passed} passed, {} failed", results.len() - passed);
+    let passed = results
+        .iter()
+        .filter(|result| result.passed && !result.skipped)
+        .count();
+    let failed = results
+        .iter()
+        .filter(|result| !result.passed && !result.skipped)
+        .count();
+    let skipped = results.iter().filter(|result| result.skipped).count();
+    if skipped == 0 {
+        println!("{passed} passed, {failed} failed");
+    } else {
+        println!("{passed} passed, {failed} failed, {skipped} skipped");
+    }
     exit
+}
+/// A parsed suite with its wired options.
+type LoadedSuite = (TestFile, RunOptions);
+/// Selection-indexed suite (reports reassemble in input order).
+type IndexedSuite = (usize, TestFile, RunOptions);
+/// Selection-indexed result.
+type IndexedResult = (usize, SuiteResult);
+
+/// Split parsed suites into (to-run, already-skipped), each tagged with its
+/// selection index so reports reassemble in input order.
+///
+/// `skip: true` always skips. When any suite sets `focus: true`, only
+/// focused suites run. A non-empty tag filter keeps suites carrying at
+/// least one listed tag. Skipped suites report `skipped: true` (never fail).
+fn select_suites(
+    loaded: Vec<LoadedSuite>,
+    tags: &[String],
+) -> (Vec<IndexedSuite>, Vec<IndexedResult>) {
+    let focused_any = loaded.iter().any(|(file, _)| file.focus);
+    let mut run = Vec::new();
+    let mut skipped = Vec::new();
+    for (index, (file, opts)) in loaded.into_iter().enumerate() {
+        let excluded = file.skip
+            || (focused_any && !file.focus)
+            || (!tags.is_empty() && !file.tags.iter().any(|tag| tags.contains(tag)));
+        if excluded {
+            skipped.push((index, skipped_result(&file.name)));
+        } else {
+            run.push((index, file, opts));
+        }
+    }
+    (run, skipped)
+}
+
+/// Keep the Nth 1-based slice of M over the (already sorted) run list,
+/// preserving selection indices.
+fn apply_shard(run: Vec<IndexedSuite>, n: usize, m: usize) -> Vec<IndexedSuite> {
+    run.into_iter()
+        .enumerate()
+        .filter(|(i, _)| i % m == n - 1)
+        .map(|(_, pair)| pair)
+        .collect()
+}
+
+/// A passing-but-skipped result so reports stay complete.
+fn skipped_result(name: &str) -> SuiteResult {
+    SuiteResult {
+        schema: TestFile::schema_id().to_string(),
+        suite: name.to_string(),
+        passed: true,
+        skipped: true,
+        attempts: 1,
+        exit_success: None,
+        exit_signal: None,
+        exit_code: None,
+        duration_ms: 0,
+        steps: Vec::new(),
+        failure: None,
+        terminal: TerminalInfo {
+            width: 0,
+            height: 0,
+            term: String::new(),
+        },
+    }
+}
+
+/// Parse `N/M` shard selection (both 1-based, `N <= M`).
+pub fn parse_shard(raw: &str) -> Result<(usize, usize), String> {
+    let (n, m) = raw
+        .split_once('/')
+        .ok_or_else(|| format!("expected N/M, got {raw:?}"))?;
+    let n: usize = n
+        .parse()
+        .map_err(|_| format!("bad shard index in {raw:?}"))?;
+    let m: usize = m
+        .parse()
+        .map_err(|_| format!("bad shard total in {raw:?}"))?;
+    if n == 0 || m == 0 || n > m {
+        return Err(format!("shard needs 1 <= N <= M, got {raw:?}"));
+    }
+    Ok((n, m))
 }
 
 /// Map infrastructure errors to CLI exit codes.
@@ -314,7 +483,13 @@ fn step_pause_hook() -> tui_lab_core::StepHook {
 
 /// One-line-per-suite human summary.
 fn print_summary(result: &SuiteResult) {
-    let mark = if result.passed { "✓" } else { "✗" };
+    let mark = if result.skipped {
+        "○"
+    } else if result.passed {
+        "✓"
+    } else {
+        "✗"
+    };
     println!("{mark} {}", result.suite);
 }
 
@@ -466,5 +641,86 @@ mod tests {
         let found = collect_suites(&dir).expect("collect terminates");
         assert_eq!(found.len(), 1, "no duplicates through the loop");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn suite(name: &str, tags: &[&str], skip: bool, focus: bool) -> (TestFile, RunOptions) {
+        let mut yaml = format!("schema: tui-lab/v1\nname: {name}\napplication:\n  command: x\n");
+        if !tags.is_empty() {
+            yaml.push_str("tags:\n");
+            for tag in tags {
+                yaml.push_str(&format!("  - {tag}\n"));
+            }
+        }
+        yaml.push_str(&format!("skip: {skip}\nfocus: {focus}\nsteps: []\n"));
+        let file = TestFile::from_yaml(&yaml).expect("parse");
+        (file, RunOptions::default())
+    }
+
+    /// Phase A: shard parsing rejects nonsense.
+    #[test]
+    fn shard_syntax_is_strict() {
+        assert_eq!(parse_shard("1/3"), Ok((1, 3)));
+        assert_eq!(parse_shard("3/3"), Ok((3, 3)));
+        assert!(parse_shard("0/3").is_err());
+        assert!(parse_shard("4/3").is_err());
+        assert!(parse_shard("1/0").is_err());
+        assert!(parse_shard("all").is_err());
+    }
+
+    /// Phase A: skip/focus/tags partition suites; skipped never fail.
+    #[test]
+    fn selection_respects_skip_focus_tags() {
+        let loaded = vec![
+            suite("plain", &[], false, false),
+            suite("tagged", &["smoke"], false, false),
+            suite("skipped", &[], true, false),
+        ];
+        // No filter: skip only removes the skipped suite.
+        let (run, skipped) = select_suites(loaded.clone(), &[]);
+        assert_eq!(run.len(), 2);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].1.skipped);
+        assert!(skipped[0].1.passed, "skipped suites never fail");
+        // Tag filter keeps matches only.
+        let (run, skipped) = select_suites(loaded.clone(), &["smoke".to_string()]);
+        assert_eq!(
+            run.iter()
+                .map(|(_, f, _)| f.name.as_str())
+                .collect::<Vec<_>>(),
+            ["tagged"]
+        );
+        assert_eq!(skipped.len(), 2);
+        // Focus wins over everything except skip.
+        let mut focused = loaded;
+        focused[0].0.focus = true;
+        let (run, _) = select_suites(focused, &[]);
+        assert_eq!(
+            run.iter()
+                .map(|(_, f, _)| f.name.as_str())
+                .collect::<Vec<_>>(),
+            ["plain"]
+        );
+    }
+
+    /// Phase A: sharding slices the sorted run list deterministically.
+    #[test]
+    fn shards_partition_without_overlap() {
+        let loaded: Vec<LoadedSuite> = ["a", "b", "c"]
+            .iter()
+            .map(|name| suite(name, &[], false, false))
+            .collect();
+        let (run, _) = select_suites(loaded, &[]);
+        let first = apply_shard(run.clone(), 1, 2);
+        let second = apply_shard(run, 2, 2);
+        let mut names: Vec<&str> = first
+            .iter()
+            .chain(second.iter())
+            .map(|(_, f, _)| f.name.as_str())
+            .collect();
+        names.sort_unstable();
+        assert_eq!(names, ["a", "b", "c"]);
+        assert_eq!(first.len() + second.len(), 3);
+        // Selection indices survive sharding (reports stay ordered).
+        assert!(first.iter().chain(second.iter()).all(|(i, _, _)| *i < 3));
     }
 }

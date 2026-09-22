@@ -35,6 +35,15 @@ enum Commands {
         /// Step-through mode (v2).
         #[arg(long)]
         step: bool,
+        /// Shard selection N/M: run only the Nth slice of M (both 1-based).
+        #[arg(long, value_parser = commands::parse_shard)]
+        shard: Option<(usize, usize)>,
+        /// Rerun failed suites up to N extra times (flakes get more chances).
+        #[arg(long, default_value_t = 0)]
+        retries: usize,
+        /// Run only suites carrying any of these tags (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
     },
     /// Re-render stored results (junit for now).
     Report {
@@ -93,7 +102,22 @@ async fn main() {
             debug,
             step,
             parallel,
-        } => commands::run(path.as_deref(), terminal, debug, step, parallel).await,
+            shard,
+            retries,
+            tags,
+        } => {
+            commands::run(commands::RunArgs {
+                path: path.as_deref(),
+                terminal_override: terminal,
+                debug,
+                step_mode: step,
+                parallel,
+                shard,
+                retries,
+                tags: &tags,
+            })
+            .await
+        }
         Commands::Report {
             format,
             out,

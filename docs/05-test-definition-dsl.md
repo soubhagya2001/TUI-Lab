@@ -78,7 +78,27 @@ assertions:
 
 Durations read as human strings: `500ms`, `3s`, `2m` (bare numbers mean milliseconds).
 
-## 5.4 Other authoring paths (Phase 5, thin wrappers)
+## 5.4 Suite selection (tags / skip / focus / sharding)
+
+Suites carry optional selection metadata:
+
+```yaml
+tags: [smoke, login]   # --tags smoke runs suites carrying any listed tag
+skip: true             # always reported as skipped, never fails
+focus: true            # when any collected suite is focused, only focused run
+```
+
+CLI selection flags (`tuilab run --help`):
+
+*   `--tags a,b` — run only suites carrying at least one listed tag.
+*   `--shard N/M` — run the Nth 1-based slice of M (split CI matrices).
+*   `--retries N` — rerun failures up to N extra times; the final attempt
+    lands in the report with its `attempts` count.
+
+Skipped suites report `skipped: true` (passing, counted separately);
+filters matching nothing exit 0 with a message.
+
+## 5.5 Other authoring paths (Phase 5, thin wrappers)
 
 TypeScript:
 

@@ -10,6 +10,8 @@ fn fixture_result() -> SuiteResult {
         schema: "tui-lab/v1".to_string(),
         suite: "smoke & <mirrors>".to_string(),
         passed: false,
+        skipped: false,
+        attempts: 1,
         exit_success: Some(false),
         exit_signal: None,
         exit_code: Some(1),

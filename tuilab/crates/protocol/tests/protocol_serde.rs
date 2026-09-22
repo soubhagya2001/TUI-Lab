@@ -186,6 +186,25 @@ fn malformed_yaml_is_rejected() {
 }
 
 #[test]
+fn tags_skip_focus_parse_with_defaults() {
+    // Phase A: selection metadata is optional and defaults to run-everything.
+    let plain = TestFile::from_yaml(
+        "schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps: []\n",
+    )
+    .expect("parse");
+    assert!(plain.tags.is_empty());
+    assert!(!plain.skip);
+    assert!(!plain.focus);
+    let tagged = TestFile::from_yaml(
+        "schema: tui-lab/v1\nname: x\napplication:\n  command: y\ntags:\n  - smoke\n  - login\nskip: true\nfocus: true\nsteps: []\n",
+    )
+    .expect("parse");
+    assert_eq!(tagged.tags, ["smoke", "login"]);
+    assert!(tagged.skip);
+    assert!(tagged.focus);
+}
+
+#[test]
 fn empty_step_and_assertion_maps_are_errors_not_panics() {
     // R11: single-key extraction must never panic on empty maps.
     let yaml = "schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps:\n  - {}\n";

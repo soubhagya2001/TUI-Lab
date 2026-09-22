@@ -317,3 +317,132 @@ fn oversized_parallel_warns_and_clamps() {
     assert!(stderr.contains("clamped"), "warns on stderr: {stderr}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn tagged_suite(bin: &str, name: &str, tags: &str) -> String {
+    let tags_block = if tags.is_empty() {
+        String::new()
+    } else {
+        format!("tags:\n{tags}")
+    };
+    format!(
+        "schema: tui-lab/v1\nname: {name}\napplication:\n  command: \"{bin}\"\n{tags_block}steps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - press: q\nassertions:\n  - exit_code: 0\n",
+    )
+}
+
+#[test]
+fn tag_filter_runs_matches_and_counts_skips() {
+    // Phase A: --tags keeps matching suites; the rest report skipped.
+    let dir = scratch("tags");
+    let bin = fixture_bin();
+    write(&dir, "a.yaml", &tagged_suite(&bin, "tagged", "  - smoke\n"));
+    write(&dir, "b.yaml", &tagged_suite(&bin, "plain", ""));
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&dir)
+        .arg("--tags")
+        .arg("smoke")
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "no failures");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("1 passed, 0 failed, 1 skipped"),
+        "stdout:\n{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn shards_partition_suites() {
+    // Phase A: 1/2 + 2/2 cover everything exactly once.
+    let dir = scratch("shards");
+    let bin = fixture_bin();
+    write(
+        &dir,
+        "a.yaml",
+        &green_suite(&bin).replace("name: green", "name: shard-a"),
+    );
+    write(
+        &dir,
+        "b.yaml",
+        &green_suite(&bin).replace("name: green", "name: shard-b"),
+    );
+    let mut seen = Vec::new();
+    for shard in ["1/2", "2/2"] {
+        let output = Command::new(tuilab())
+            .arg("run")
+            .arg(&dir)
+            .arg("--shard")
+            .arg(shard)
+            .current_dir(&dir)
+            .output()
+            .expect("run suite");
+        assert!(output.status.success(), "shard {shard} passes");
+        seen.push(String::from_utf8_lossy(&output.stdout).into_owned());
+    }
+    assert!(
+        seen[0].contains("shard-a") && !seen[0].contains("shard-b"),
+        "{}",
+        seen[0]
+    );
+    assert!(
+        seen[1].contains("shard-b") && !seen[1].contains("shard-a"),
+        "{}",
+        seen[1]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn retries_record_attempts() {
+    // Phase A: a failing suite with --retries 1 runs twice (attempts == 2).
+    let dir = scratch("retries");
+    let suite = write(
+        &dir,
+        "failing.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: flaky\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - assert_text:\n      contains: \"no-such-screen\"\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .arg("--retries")
+        .arg("1")
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1), "still fails");
+    let text = std::fs::read_to_string(dir.join("reports").join("results.json")).expect("results");
+    assert!(text.contains("\"attempts\": 2"), "two attempts recorded");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn skipped_suite_never_fails() {
+    // Phase A: skip:true reports skipped with exit 0.
+    let dir = scratch("skipped");
+    let bin = fixture_bin();
+    write(
+        &dir,
+        "skip.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: skipped\napplication:\n  command: \"{bin}\"\nskip: true\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n"
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&dir)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "skips exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("0 passed, 0 failed, 1 skipped"),
+        "stdout:\n{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

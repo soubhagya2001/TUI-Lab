@@ -19,6 +19,11 @@ tuilab run tests/ --parallel 4
 # Slots clamp to [1, registry cap 8]; results stay in input order; a failing
 # suite never aborts its siblings.
 
+# Select and harden runs: tags, shards, retries (see docs/05 §5.4)
+tuilab run tests/ --tags smoke
+tuilab run tests/ --shard 1/3
+tuilab run tests/ --retries 2
+
 # Interactive recording (drives the app, emits YAML with smart waits)
 tuilab record --command "./codegraph" --out tests/codegen.yaml
 # end with Ctrl+\ or stdin EOF; quit the app first (see docs/10)

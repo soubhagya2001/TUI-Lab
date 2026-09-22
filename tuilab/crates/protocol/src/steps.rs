@@ -39,6 +39,16 @@ pub struct TestFile {
     /// End-of-suite assertions (e.g. `exit_code`).
     #[serde(default)]
     pub assertions: Vec<SuiteAssertion>,
+    /// Tags for `--tags` filtering (e.g. `["smoke", "login"]`).
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Skip this suite (reported as skipped, never fails).
+    #[serde(default)]
+    pub skip: bool,
+    /// Focus this suite: when any collected suite is focused, only focused
+    /// suites run.
+    #[serde(default)]
+    pub focus: bool,
 }
 
 impl TestFile {

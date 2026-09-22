@@ -78,6 +78,8 @@ fn infra_failure(suite: String, error: &str) -> SuiteResult {
         schema: tui_lab_protocol::TestFile::schema_id().to_string(),
         suite: suite.clone(),
         passed: false,
+        skipped: false,
+        attempts: 1,
         exit_success: None,
         exit_signal: None,
         exit_code: None,

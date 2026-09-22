@@ -244,6 +244,9 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
         steps,
         cleanup: Vec::new(),
         assertions: vec![SuiteAssertion::ExitCode(0)],
+        tags: Vec::new(),
+        skip: false,
+        focus: false,
     };
     match serde_yaml::to_string(&file) {
         Ok(yaml) => match std::fs::write(out, yaml) {
