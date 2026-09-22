@@ -87,7 +87,7 @@ apply. Screenshots/GIFs of sample runs land later in `web-guide/public/`.
 | `/assertions-snapshots` | Taxonomy, masking, retry semantics | `docs/06` |
 | `/recorder` | `record` workflow + smart waits | `docs/10` |
 | `/cli-reference` | Commands, flags, `tuilab.yaml`, exit codes | `docs/07` |
-| `/mcp-agents` | 9 MCP tools, Modes A/B, allowlist + cwd jail | `docs/08` |
+| `/mcp-agents` | 10 MCP tools, Modes A/B, allowlist + cwd jail, audit log | `docs/08` |
 | `/sdks` | Setup + sketches, tabbed Py/JS/Rust | `docs/09` |
 | `/troubleshooting` | User FAQ: installs, hangs, flakes, reports | distilled from `docs/11`, `docs/12` (no CI content — end-customer guide) |
 

@@ -44,7 +44,7 @@ const CORPUS: StoredEntry[] = [
   {
     path: '/mcp-agents',
     title: 'MCP & AI agents',
-    text: 'tuilab-mcp tools tui_launch tui_press tui_type tui_screen tui_wait_for_text tui_assert tui_snapshot tui_run_test tui_close allowlist cwd jail sensitive sessions',
+    text: 'tuilab-mcp tools tui_launch tui_press tui_type tui_screen tui_wait_for_text tui_assert tui_snapshot tui_resize tui_run_test tui_close allowlist cwd jail sensitive sessions audit',
   },
   {
     path: '/sdks',

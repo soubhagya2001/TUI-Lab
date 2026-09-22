@@ -13,7 +13,7 @@
 | 5 | [05-test-definition-dsl.md](./05-test-definition-dsl.md) | Portable YAML schema `tui-lab/v1`, SDK examples |
 | 6 | [06-assertion-snapshot-engine.md](./06-assertion-snapshot-engine.md) | Assertion taxonomy, snapshots, determinism/masking |
 | 7 | [07-cli-reference.md](./07-cli-reference.md) | `init/run/record/report`, flags, examples |
-| 8 | [08-mcp-server-spec.md](./08-mcp-server-spec.md) | 9 MCP tools, Modes A/B, session handling |
+| 8 | [08-mcp-server-spec.md](./08-mcp-server-spec.md) | 10 MCP tools, Modes A/B, session handling, audit log |
 | 9 | [09-sdk-integration-guide.md](./09-sdk-integration-guide.md) | Thin-wrapper SDK strategy, Python/JS/Rust sketches |
 | 10 | [10-recorder-and-ai.md](./10-recorder-and-ai.md) | Recorder, smart waits, AI gen/explain/self-heal |
 | 11 | [11-ci-reporting-debugging.md](./11-ci-reporting-debugging.md) | CI flow, JUnit/HTML, failure bundle |

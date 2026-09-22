@@ -19,3 +19,9 @@ security:
     - "^\\./.*"
     - "^cargo run.*"
     - "^python.*"
+  # Opt-in MCP call audit (JSONL, one line per tool call). Disabled by
+  # default; see docs/08-mcp-server-spec.md §8.5.
+  # audit:
+  #   enabled: true
+  #   path: reports/mcp-audit.jsonl
+  #   fields: [timestamp, tool, session_id, result]  # + args, elapsed_ms

@@ -294,3 +294,26 @@ pub struct CloseOut {
     /// Kill-path evidence (pump counters), if the grace expired first.
     pub detail: Option<String>,
 }
+
+/// `tui_resize` input.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResizeParams {
+    /// Session id.
+    pub session_id: String,
+    /// Columns (zero rejected, oversize clamped to limits).
+    pub width: u16,
+    /// Rows (zero rejected, oversize clamped to limits).
+    pub height: u16,
+}
+
+/// `tui_resize` output.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ResizeOut {
+    /// Always true when no error is returned.
+    pub ok: bool,
+    /// Actual columns after clamping.
+    pub width: u16,
+    /// Actual rows after clamping.
+    pub height: u16,
+}

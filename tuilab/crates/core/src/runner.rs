@@ -470,19 +470,13 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
             }
         }
         Step::Resize(to) => {
-            // R6: validate + clamp through the shared guard (never raw u16).
-            if to.width == 0 || to.height == 0 {
-                return Err(CoreError::Message(format!(
-                    "resize needs nonzero dimensions, got {}x{}",
-                    to.width, to.height
-                )));
-            }
-            let (width, height) = tui_lab_terminal::utils::clamp_dims(to.width, to.height);
-            session
-                .pty
-                .resize(width, height)
-                .map_err(|e| CoreError::Pty(e.to_string()))?;
-            session.emu.resize(width as usize, height as usize);
+            // Shared helper validates, clamps, and resizes PTY + grid.
+            let (width, height) = crate::sessions::resize_live(
+                &mut *session.pty,
+                &mut *session.emu,
+                to.width,
+                to.height,
+            )?;
             session
                 .ctx
                 .input_history

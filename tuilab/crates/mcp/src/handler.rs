@@ -1,4 +1,4 @@
-//! MCP handler: the 9 `tui_*` tools over shared core state (docs/08).
+//! MCP handler: the 10 `tui_*` tools over shared core state (docs/08).
 //!
 //! Modes: A (interactive launch → inspect → act loop) and B (`tui_run_test`
 //! full suites). Every input tool's description ends with the sync rule:
@@ -19,11 +19,11 @@ use tui_lab_pty::SpawnOptions;
 use tui_lab_runtime::matches as screen_matches;
 
 use crate::constants::{MAX_SESSIONS, SESSION_IDLE_SECS};
-use crate::security::{jail, jail_file, Allowlist};
+use crate::security::{jail, jail_file, Allowlist, AuditConfig};
 use crate::tools::{
     AssertOut, AssertParams, CloseOut, CloseParams, CursorPos, LaunchOut, LaunchParams, PressOut,
-    PressParams, RunFailure, RunTestOut, RunTestParams, ScreenOut, ScreenParams, SnapshotOut,
-    SnapshotParams, TypeOut, TypeParams, WaitOut, WaitParams,
+    PressParams, ResizeOut, ResizeParams, RunFailure, RunTestOut, RunTestParams, ScreenOut,
+    ScreenParams, SnapshotOut, SnapshotParams, TypeOut, TypeParams, WaitOut, WaitParams,
 };
 
 /// Reap sessions idle longer than this on every launch.
@@ -47,6 +47,8 @@ pub struct HandlerState {
     pub allow: Allowlist,
     /// Idle timeout for opportunistic GC (R10).
     pub idle: Duration,
+    /// Call audit policy (opt-in JSONL).
+    pub audit: AuditConfig,
 }
 
 /// `tuilab-mcp` request handler.
@@ -58,17 +60,18 @@ pub struct TuiLabHandler {
 
 impl TuiLabHandler {
     /// Build a handler rooted at `root` with the given allowlist.
-    pub fn new(root: PathBuf, allow: Allowlist) -> Self {
-        Self::with_idle(root, allow, Duration::from_secs(IDLE_REAP_SECS))
+    pub fn new(root: PathBuf, allow: Allowlist, audit: AuditConfig) -> Self {
+        Self::with_idle(root, allow, audit, Duration::from_secs(IDLE_REAP_SECS))
     }
 
     /// Build a handler with an explicit idle timeout (tests use short ones).
-    pub fn with_idle(root: PathBuf, allow: Allowlist, idle: Duration) -> Self {
+    pub fn with_idle(root: PathBuf, allow: Allowlist, audit: AuditConfig, idle: Duration) -> Self {
         let state = Arc::new(tokio::sync::Mutex::new(HandlerState {
             registry: SessionRegistry::with_cap(MAX_SESSIONS),
             root,
             allow,
             idle,
+            audit,
         }));
         Self {
             state,
@@ -83,6 +86,92 @@ impl TuiLabHandler {
         let mut state = self.state.lock().await;
         let idle = state.idle;
         state.registry.reap_idle(idle);
+    }
+
+    /// Append one audit line when auditing is enabled (opt-in JSONL).
+    ///
+    /// Never fails the tool: sink errors trace and drop. `args` carries the
+    /// caller-supplied redaction (e.g. `tui_type` secrets arrive redacted).
+    async fn audit(
+        &self,
+        tool: &str,
+        session: Option<&str>,
+        ok: bool,
+        detail: &str,
+        args: Option<serde_json::Value>,
+        elapsed: std::time::Duration,
+    ) {
+        use crate::security::AuditField;
+        let cfg = { self.state.lock().await.audit.clone() };
+        if !cfg.enabled {
+            return;
+        }
+        let mut record = serde_json::Map::with_capacity(cfg.fields.len());
+        for field in &cfg.fields {
+            match field {
+                AuditField::Timestamp => {
+                    let millis = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    record.insert("timestamp".to_string(), millis.into());
+                }
+                AuditField::Tool => {
+                    record.insert("tool".to_string(), tool.into());
+                }
+                AuditField::Session => {
+                    record.insert("session_id".to_string(), session.map(str::to_string).into());
+                }
+                AuditField::Result => {
+                    record.insert(
+                        "result".to_string(),
+                        if ok {
+                            "ok".into()
+                        } else {
+                            detail.to_string().into()
+                        },
+                    );
+                }
+                AuditField::Args => {
+                    record.insert(
+                        "args".to_string(),
+                        args.clone().unwrap_or(serde_json::Value::Null),
+                    );
+                }
+                AuditField::Elapsed => {
+                    record.insert(
+                        "elapsed_ms".to_string(),
+                        (elapsed.as_millis() as u64).into(),
+                    );
+                }
+            }
+        }
+        let line = serde_json::Value::Object(record).to_string();
+        let path = cfg.path.clone();
+        let write = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            use std::io::Write as _;
+            if let Some(parent) = path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("audit mkdir {}: {e}", parent.display()))?;
+                }
+            }
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .map_err(|e| format!("audit open {}: {e}", path.display()))?;
+            let mut buf = line;
+            buf.push('\n');
+            file.write_all(buf.as_bytes())
+                .map_err(|e| format!("audit write {}: {e}", path.display()))
+        })
+        .await;
+        match write {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => tracing::warn!("audit sink failed: {e}"),
+            Err(e) => tracing::warn!("audit task failed: {e}"),
+        }
     }
 
     /// Expose the router for `list_all` introspection (tests, diagnostics).
@@ -112,7 +201,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<LaunchParams>,
     ) -> Result<Json<LaunchOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let args = serde_json::json!({"command": params.0.command, "args": params.0.args});
+        let outcome = self.launch_inner(params.0).await;
+        let session = outcome.as_ref().ok().map(|ok| ok.0.session_id.as_str());
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_launch",
+            session,
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn launch_inner(&self, params: LaunchParams) -> Result<Json<LaunchOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         state
@@ -152,7 +258,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<PressParams>,
     ) -> Result<Json<PressOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({"key": params.0.key});
+        let outcome = self.press_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_press",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn press_inner(&self, params: PressParams) -> Result<Json<PressOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
@@ -181,7 +304,29 @@ impl TuiLabHandler {
         description = "Type text verbatim in a session. Set sensitive=true for secrets (only the length is logged). Then call tui_wait_for_text."
     )]
     pub async fn tui_type(&self, params: Parameters<TypeParams>) -> Result<Json<TypeOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        // Sensitive text is redacted before it can reach the audit sink.
+        let args = if params.0.sensitive {
+            serde_json::json!({"text": "[redacted]", "sensitive": true})
+        } else {
+            serde_json::json!({"text": params.0.text, "sensitive": false})
+        };
+        let outcome = self.type_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_type",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn type_inner(&self, params: TypeParams) -> Result<Json<TypeOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
@@ -214,7 +359,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<ScreenParams>,
     ) -> Result<Json<ScreenOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({"styled": params.0.styled});
+        let outcome = self.screen_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_screen",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn screen_inner(&self, params: ScreenParams) -> Result<Json<ScreenOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
@@ -264,7 +426,28 @@ impl TuiLabHandler {
         &self,
         params: Parameters<WaitParams>,
     ) -> Result<Json<WaitOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({
+            "text": params.0.text,
+            "regex": params.0.regex,
+            "timeout_ms": params.0.timeout_ms,
+        });
+        let outcome = self.wait_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_wait_for_text",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn wait_inner(&self, params: WaitParams) -> Result<Json<WaitOut>, String> {
         // R6: an explicit zero timeout means "use the default", never
         // "fail instantly".
         let timeout =
@@ -309,7 +492,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<AssertParams>,
     ) -> Result<Json<AssertOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = params.0.assertion.clone();
+        let outcome = self.assert_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_assert",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn assert_inner(&self, params: AssertParams) -> Result<Json<AssertOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
@@ -336,7 +536,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<SnapshotParams>,
     ) -> Result<Json<SnapshotOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({"name": params.0.name});
+        let outcome = self.snapshot_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_snapshot",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn snapshot_inner(&self, params: SnapshotParams) -> Result<Json<SnapshotOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let session = state
@@ -375,7 +592,23 @@ impl TuiLabHandler {
         &self,
         params: Parameters<RunTestParams>,
     ) -> Result<Json<RunTestOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let args = serde_json::json!({"test_file": params.0.test_file});
+        let outcome = self.run_test_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_run_test",
+            None,
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn run_test_inner(&self, params: RunTestParams) -> Result<Json<RunTestOut>, String> {
         self.reap().await;
         let state = self.state.lock().await;
         // S3: confine the suite file under the project root (no traversal).
@@ -433,7 +666,24 @@ impl TuiLabHandler {
         &self,
         params: Parameters<CloseParams>,
     ) -> Result<Json<CloseOut>, String> {
-        let params = params.0;
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({"quit": params.0.quit});
+        let outcome = self.close_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_close",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn close_inner(&self, params: CloseParams) -> Result<Json<CloseOut>, String> {
         self.reap().await;
         let mut state = self.state.lock().await;
         let closed = state
@@ -448,6 +698,47 @@ impl TuiLabHandler {
             exit_code: closed.exit_code,
             signal: closed.signal,
             detail: closed.note,
+        }))
+    }
+
+    /// Resize a session's PTY + grid. Redraw is async: follow with
+    /// tui_wait_for_text — never assert on a stale screen.
+    #[tool(
+        name = "tui_resize",
+        description = "Resize a session terminal. Returns the actual dimensions after clamping. Then call tui_wait_for_text — redraw is async."
+    )]
+    pub async fn tui_resize(
+        &self,
+        params: Parameters<ResizeParams>,
+    ) -> Result<Json<ResizeOut>, String> {
+        let started = std::time::Instant::now();
+        let session = params.0.session_id.clone();
+        let args = serde_json::json!({"width": params.0.width, "height": params.0.height});
+        let outcome = self.resize_inner(params.0).await;
+        let detail = outcome.as_ref().err().cloned().unwrap_or_default();
+        self.audit(
+            "tui_resize",
+            Some(&session),
+            outcome.is_ok(),
+            &detail,
+            Some(args),
+            started.elapsed(),
+        )
+        .await;
+        outcome
+    }
+
+    async fn resize_inner(&self, params: ResizeParams) -> Result<Json<ResizeOut>, String> {
+        self.reap().await;
+        let mut state = self.state.lock().await;
+        let (width, height) = state
+            .registry
+            .resize(&params.session_id, params.width, params.height)
+            .map_err(|e| tool_error("resize", e))?;
+        Ok(Json(ResizeOut {
+            ok: true,
+            width,
+            height,
         }))
     }
 }

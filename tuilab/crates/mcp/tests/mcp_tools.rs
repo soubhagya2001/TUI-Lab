@@ -8,10 +8,10 @@ use std::process::Command;
 
 use rmcp::handler::server::wrapper::Parameters;
 use tui_lab_mcp::handler::TuiLabHandler;
-use tui_lab_mcp::security::Allowlist;
+use tui_lab_mcp::security::{Allowlist, AuditConfig, AuditField};
 use tui_lab_mcp::tools::{
-    AssertParams, CloseParams, LaunchParams, PressParams, RunTestParams, ScreenParams,
-    SnapshotParams, TypeParams, WaitParams,
+    AssertParams, CloseParams, LaunchParams, PressParams, ResizeParams, RunTestParams,
+    ScreenParams, SnapshotParams, TypeParams, WaitParams,
 };
 
 fn scratch_root(name: &str) -> PathBuf {
@@ -24,7 +24,10 @@ fn scratch_root(name: &str) -> PathBuf {
 fn open_handler(name: &str) -> (TuiLabHandler, PathBuf) {
     let root = scratch_root(name);
     let allow = Allowlist::from_sources(&[".*"]).expect("permissive test allowlist");
-    (TuiLabHandler::new(root.clone(), allow), root)
+    (
+        TuiLabHandler::new(root.clone(), allow, AuditConfig::disabled()),
+        root,
+    )
 }
 
 /// Build the fixture binary on demand; return its path.
@@ -53,7 +56,7 @@ fn fixture_bin() -> String {
 }
 
 #[test]
-fn router_lists_exactly_nine_tools() {
+fn router_lists_exactly_ten_tools() {
     let (handler, _root) = open_handler("inventory");
     let mut names: Vec<String> = handler
         .router()
@@ -69,6 +72,7 @@ fn router_lists_exactly_nine_tools() {
             "tui_close",
             "tui_launch",
             "tui_press",
+            "tui_resize",
             "tui_run_test",
             "tui_screen",
             "tui_snapshot",
@@ -82,7 +86,7 @@ fn router_lists_exactly_nine_tools() {
 async fn forbidden_commands_are_rejected() {
     let root = scratch_root("forbidden");
     let allow = Allowlist::defaults();
-    let handler = TuiLabHandler::new(root, allow);
+    let handler = TuiLabHandler::new(root, allow, AuditConfig::disabled());
     let result = handler
         .tui_launch(Parameters(LaunchParams {
             command: "rm".to_string(),
@@ -481,7 +485,12 @@ async fn idle_sessions_reaped_on_tool_entry() {
     // untouched session past the idle timeout is gone at the next call.
     let root = scratch_root("reap");
     let allow = Allowlist::from_sources(&[".*"]).expect("permissive");
-    let handler = TuiLabHandler::with_idle(root, allow, std::time::Duration::from_millis(100));
+    let handler = TuiLabHandler::with_idle(
+        root,
+        allow,
+        AuditConfig::disabled(),
+        std::time::Duration::from_millis(100),
+    );
     let id = handler
         .tui_launch(Parameters(LaunchParams {
             command: fixture_bin(),
@@ -516,6 +525,179 @@ async fn idle_sessions_reaped_on_tool_entry() {
         Err(err) => err,
     };
     assert!(err.contains("unknown session"), "{err}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn resize_reports_actual_dims_and_validates() {
+    let (handler, _root) = open_handler("resize");
+    let id = handler
+        .tui_launch(Parameters(LaunchParams {
+            command: fixture_bin(),
+            args: vec![],
+            cwd: None,
+            width: 120,
+            height: 40,
+            env: Default::default(),
+        }))
+        .await
+        .expect("launch")
+        .0
+        .session_id;
+    // Normal resize reports back the requested dims; the grid follows
+    // (visible through tui_screen).
+    let out = handler
+        .tui_resize(Parameters(ResizeParams {
+            session_id: id.clone(),
+            width: 80,
+            height: 24,
+        }))
+        .await
+        .expect("resize")
+        .0;
+    assert!(out.ok);
+    assert_eq!((out.width, out.height), (80, 24));
+    let screen = handler
+        .tui_screen(Parameters(ScreenParams {
+            session_id: id.clone(),
+            styled: false,
+        }))
+        .await
+        .expect("screen")
+        .0;
+    assert_eq!((screen.width, screen.height), (80, 24));
+    // Oversize clamps to materialization limits and says so.
+    let clamped = handler
+        .tui_resize(Parameters(ResizeParams {
+            session_id: id.clone(),
+            width: 9999,
+            height: 9999,
+        }))
+        .await
+        .expect("clamped resize")
+        .0;
+    assert!(clamped.ok);
+    assert_eq!((clamped.width, clamped.height), (500, 200));
+    // Zero dims are rejected, not silently applied.
+    assert!(handler
+        .tui_resize(Parameters(ResizeParams {
+            session_id: id.clone(),
+            width: 0,
+            height: 24,
+        }))
+        .await
+        .is_err());
+    // Unknown sessions error.
+    assert!(handler
+        .tui_resize(Parameters(ResizeParams {
+            session_id: "sess_404".to_string(),
+            width: 80,
+            height: 24,
+        }))
+        .await
+        .is_err());
+    handler
+        .tui_close(Parameters(CloseParams {
+            session_id: id,
+            quit: Some("q".to_string()),
+        }))
+        .await
+        .expect("close");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn audit_log_records_calls_and_redacts_secrets() {
+    // Opt-in JSONL audit: successes + failures logged, sensitive text redacted.
+    let root = scratch_root("audit");
+    let allow = Allowlist::from_sources(&[".*"]).expect("permissive");
+    let audit_path = root.join("audit.jsonl");
+    let audit = AuditConfig {
+        enabled: true,
+        path: audit_path.clone(),
+        fields: vec![
+            AuditField::Timestamp,
+            AuditField::Tool,
+            AuditField::Session,
+            AuditField::Result,
+            AuditField::Args,
+            AuditField::Elapsed,
+        ],
+    };
+    let handler = TuiLabHandler::new(root.clone(), allow, audit);
+    let id = handler
+        .tui_launch(Parameters(LaunchParams {
+            command: fixture_bin(),
+            args: vec![],
+            cwd: None,
+            width: 120,
+            height: 40,
+            env: Default::default(),
+        }))
+        .await
+        .expect("launch")
+        .0
+        .session_id;
+    handler
+        .tui_type(Parameters(TypeParams {
+            session_id: id.clone(),
+            text: "s3cret".to_string(),
+            sensitive: true,
+        }))
+        .await
+        .expect("type");
+    assert!(handler
+        .tui_press(Parameters(PressParams {
+            session_id: id.clone(),
+            key: "F13".to_string(),
+        }))
+        .await
+        .is_err());
+    handler
+        .tui_close(Parameters(CloseParams {
+            session_id: id.clone(),
+            quit: Some("q".to_string()),
+        }))
+        .await
+        .expect("close");
+    let raw = std::fs::read_to_string(&audit_path).expect("audit file");
+    assert!(!raw.contains("s3cret"), "secrets never reach the audit log");
+    let lines: Vec<serde_json::Value> = raw
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("JSONL line"))
+        .collect();
+    assert_eq!(lines.len(), 4, "launch + type + press + close");
+    for line in &lines {
+        for field in [
+            "timestamp",
+            "tool",
+            "session_id",
+            "result",
+            "args",
+            "elapsed_ms",
+        ] {
+            assert!(line.get(field).is_some(), "field {field} in {line}");
+        }
+    }
+    let tools: Vec<&str> = lines
+        .iter()
+        .map(|line| line.get("tool").and_then(|t| t.as_str()).unwrap_or("?"))
+        .collect();
+    assert_eq!(tools, ["tui_launch", "tui_type", "tui_press", "tui_close"]);
+    let typed = &lines[1];
+    assert_eq!(
+        typed
+            .get("args")
+            .and_then(|a| a.get("text"))
+            .and_then(|t| t.as_str()),
+        Some("[redacted]")
+    );
+    assert_eq!(typed.get("result").and_then(|r| r.as_str()), Some("ok"));
+    let failed = &lines[2];
+    assert_ne!(
+        failed.get("result").and_then(|r| r.as_str()),
+        Some("ok"),
+        "failures log the error"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

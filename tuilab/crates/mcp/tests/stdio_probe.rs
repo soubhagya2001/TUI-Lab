@@ -53,7 +53,7 @@ fn server_bin() -> std::path::PathBuf {
 }
 
 #[test]
-fn stdio_handshake_lists_nine_tools() {
+fn stdio_handshake_lists_ten_tools() {
     let root = std::env::temp_dir().join(format!("tuilab-probe-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).expect("probe root");
@@ -79,13 +79,14 @@ fn stdio_handshake_lists_nine_tools() {
         .expect("send tools/list");
     let list = recv(&rx, "tools/list response");
     let tools = list["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 9, "{list}");
+    assert_eq!(tools.len(), 10, "{list}");
     let mut names: Vec<&str> = tools
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     names.sort_unstable();
     assert!(names.contains(&"tui_launch"));
+    assert!(names.contains(&"tui_resize"));
     assert!(names.contains(&"tui_run_test"));
 
     let _ = child.kill();

@@ -43,7 +43,7 @@ export const GUIDE_ROUTES: GuideRoute[] = [
   {
     path: '/mcp-agents',
     title: 'MCP & AI agents',
-    description: 'Nine MCP tools, Modes A/B, security.',
+    description: 'Ten MCP tools, Modes A/B, security, audit log.',
   },
   {
     path: '/sdks',

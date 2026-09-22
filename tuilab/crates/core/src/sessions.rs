@@ -180,6 +180,30 @@ impl SessionRegistry {
         })
     }
 
+    /// Resize a session's PTY + grid together, returning the actual dims.
+    ///
+    /// Shared choke point for the runner, proto, and MCP paths: zero dims
+    /// are rejected, oversize dims clamp to materialization limits (R6).
+    pub fn resize(&mut self, id: &str, width: u16, height: u16) -> Result<(u16, u16)> {
+        if width == 0 || height == 0 {
+            return Err(CoreError::Message(format!(
+                "resize needs nonzero dimensions, got {width}x{height}"
+            )));
+        }
+        let session = self
+            .sessions
+            .get_mut(id)
+            .ok_or_else(|| CoreError::Message(format!("unknown session: {id}")))?;
+        let (width, height) = tui_lab_terminal::utils::clamp_dims(width, height);
+        session
+            .pty
+            .resize(width, height)
+            .map_err(|e| CoreError::Pty(e.to_string()))?;
+        session.emu.resize(width as usize, height as usize);
+        session.last_active = Instant::now();
+        Ok((width, height))
+    }
+
     /// Close and drop sessions idle longer than `max_idle`. Returns the count.
     pub fn reap_idle(&mut self, max_idle: Duration) -> usize {
         let stale: Vec<String> = self
@@ -217,4 +241,27 @@ impl Default for SessionRegistry {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Resize one live PTY + grid pair, returning the actual dims.
+///
+/// Shared by the registry (`SessionRegistry::resize`), the YAML runner, and
+/// the proto handler: zero dims are rejected, oversize dims clamp to
+/// materialization limits (R6). PTY and grid always move together.
+pub fn resize_live(
+    pty: &mut tui_lab_pty::PtySession,
+    emu: &mut tui_lab_terminal::Emulator,
+    width: u16,
+    height: u16,
+) -> Result<(u16, u16)> {
+    if width == 0 || height == 0 {
+        return Err(CoreError::Message(format!(
+            "resize needs nonzero dimensions, got {width}x{height}"
+        )));
+    }
+    let (width, height) = tui_lab_terminal::utils::clamp_dims(width, height);
+    pty.resize(width, height)
+        .map_err(|e| CoreError::Pty(e.to_string()))?;
+    emu.resize(width as usize, height as usize);
+    Ok((width, height))
 }

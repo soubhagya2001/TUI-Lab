@@ -287,22 +287,13 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             width,
             height,
         } => {
-            let session = match registry.get_mut(&session_id) {
-                Ok(session) => session,
-                Err(e) => return error_response(&e.to_string()),
-            };
-            // R6: same validate + clamp guard as the runner path.
-            if width == 0 || height == 0 {
-                return error_response(&format!(
-                    "resize needs nonzero dimensions, got {width}x{height}"
-                ));
+            // Shared helper validates, clamps, and resizes PTY + grid.
+            match registry.resize(&session_id, width, height) {
+                Ok((width, height)) => {
+                    serde_json::json!({"ok": true, "width": width, "height": height}).to_string()
+                }
+                Err(e) => error_response(&e.to_string()),
             }
-            let (width, height) = tui_lab_terminal::utils::clamp_dims(width, height);
-            if let Err(e) = session.pty.resize(width, height) {
-                return error_response(&e.to_string());
-            }
-            session.emu.resize(width as usize, height as usize);
-            serde_json::json!({"ok": true}).to_string()
         }
         Action::Close {
             session_id, signal, ..

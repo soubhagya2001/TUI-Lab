@@ -11,9 +11,7 @@ import { StepBlock, StepDescription } from '../components/step-block';
 
 <StepDescription>The MCP server ships with every installer — `pip install tui-lab` or `npx @tui-lab/cli` both put `tuilab-mcp` on PATH. Verify:</StepDescription>
 
-```bash
-tuilab-mcp --help
-```
+<Snippet label="bash" code={`tuilab-mcp --help`} />
 
 </StepBlock>
 
@@ -83,3 +81,7 @@ The agent will launch a session, synchronize on screen text (never fixed sleeps)
 </StepBlock>
 
 <Callout title="Safety rails">The server only runs commands listed in `security.allow_commands` in `tuilab.yaml`, and only inside your project folder. Passwords typed with the sensitive flag never reach logs. Sessions are capped at 8 concurrent with a 60s idle kill.</Callout>
+
+## Going further
+
+Your agent can also resize sessions (`tui_resize` — the server reports back the actual clamped dimensions, so ask it to follow with a wait for the redraw). For compliance records, enable the opt-in call audit in `tuilab.yaml` (`security.audit` → JSONL, one line per tool call, secrets redacted); see `docs/08-mcp-server-spec.md` §8.5.

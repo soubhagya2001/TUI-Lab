@@ -125,6 +125,140 @@ pub fn jail_file(root: &Path, file: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+/// One auditable field of an MCP call record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuditField {
+    /// Milliseconds since the Unix epoch.
+    Timestamp,
+    /// Tool name (`tui_launch`, …).
+    Tool,
+    /// Session id, when the call targets one.
+    Session,
+    /// `ok` or the error string.
+    Result,
+    /// Tool arguments (see redaction rule below).
+    Args,
+    /// Milliseconds the call took.
+    Elapsed,
+}
+
+impl AuditField {
+    /// All selectable names, for error messages.
+    pub const NAMES: &[&str] = &[
+        "timestamp",
+        "tool",
+        "session_id",
+        "result",
+        "args",
+        "elapsed_ms",
+    ];
+
+    fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "timestamp" => Ok(Self::Timestamp),
+            "tool" => Ok(Self::Tool),
+            "session_id" => Ok(Self::Session),
+            "result" => Ok(Self::Result),
+            "args" => Ok(Self::Args),
+            "elapsed_ms" => Ok(Self::Elapsed),
+            other => Err(format!(
+                "unknown audit field {other:?}; select from {:?}",
+                Self::NAMES
+            )),
+        }
+    }
+}
+
+/// MCP call audit policy (`security.audit` in `tuilab.yaml`).
+///
+/// Disabled by default. When enabled, every tool call appends one JSON line.
+/// `args` logging is sensitive-aware: `tui_type` text typed with
+/// `sensitive: true` records as `"[redacted]"`, never the secret.
+#[derive(Clone, Debug)]
+pub struct AuditConfig {
+    /// Master switch (default false).
+    pub enabled: bool,
+    /// JSONL sink (default `reports/mcp-audit.jsonl`, relative to root).
+    pub path: PathBuf,
+    /// Selected fields (default timestamp/tool/session_id/result).
+    pub fields: Vec<AuditField>,
+}
+
+impl AuditConfig {
+    /// Auditing off (the default).
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            path: PathBuf::from("reports/mcp-audit.jsonl"),
+            fields: Self::default_fields(),
+        }
+    }
+
+    /// Minimal fields logged when enabled without an explicit list.
+    pub fn default_fields() -> Vec<AuditField> {
+        vec![
+            AuditField::Timestamp,
+            AuditField::Tool,
+            AuditField::Session,
+            AuditField::Result,
+        ]
+    }
+}
+
+/// Load `security.audit` from `tuilab.yaml`; disabled when absent, error
+/// when malformed (unknown field names included — typos must not silently
+/// narrow the audit).
+pub fn load_audit(root: &Path) -> Result<AuditConfig, String> {
+    let path = root.join("tuilab.yaml");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    if text.trim().is_empty() {
+        return Ok(AuditConfig::disabled());
+    }
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let audit = match value
+        .get("security")
+        .and_then(|security| security.get("audit"))
+    {
+        None => return Ok(AuditConfig::disabled()),
+        Some(audit) => audit,
+    };
+    let enabled = audit
+        .get("enabled")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false);
+    let audit_path = audit
+        .get("path")
+        .and_then(serde_yaml::Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("reports/mcp-audit.jsonl"));
+    let fields = match audit.get("fields") {
+        None => AuditConfig::default_fields(),
+        Some(list) => {
+            let names = list
+                .as_sequence()
+                .ok_or_else(|| format!("{}: audit.fields must be a list", path.display()))?;
+            let mut fields = Vec::with_capacity(names.len());
+            for name in names {
+                let name = name.as_str().ok_or_else(|| {
+                    format!("{}: audit field names must be strings", path.display())
+                })?;
+                fields.push(AuditField::parse(name)?);
+            }
+            fields
+        }
+    };
+    Ok(AuditConfig {
+        enabled,
+        path: audit_path,
+        fields,
+    })
+}
+
 /// Resolve `cwd` (relative to `root`) and confine it under `root`.
 pub fn jail(root: &Path, cwd: Option<&str>) -> Result<PathBuf, String> {
     let canonical_root = root
@@ -229,6 +363,55 @@ mod tests {
         std::fs::create_dir_all(dir.join("tuilab.yaml")).expect("dir as file");
         let err = load_allowlist(&dir).expect_err("unreadable must fail");
         assert!(err.contains("read"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn audit_root(name: &str, yaml: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tuilab-audit-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        std::fs::write(dir.join("tuilab.yaml"), yaml).expect("config");
+        dir
+    }
+
+    #[test]
+    fn audit_defaults_to_disabled() {
+        let dir = std::env::temp_dir().join("tuilab-mcp-audit-absent");
+        let cfg = load_audit(&dir).expect("absent ok");
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.fields, AuditConfig::default_fields());
+    }
+
+    #[test]
+    fn audit_parses_enabled_with_fields() {
+        let dir = audit_root(
+            "on",
+            "security:\n  audit:\n    enabled: true\n    path: custom/audit.jsonl\n    fields: [timestamp, tool, args, elapsed_ms]\n",
+        );
+        let cfg = load_audit(&dir).expect("parse");
+        assert!(cfg.enabled);
+        assert_eq!(cfg.path, PathBuf::from("custom/audit.jsonl"));
+        assert_eq!(
+            cfg.fields,
+            vec![
+                AuditField::Timestamp,
+                AuditField::Tool,
+                AuditField::Args,
+                AuditField::Elapsed,
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn audit_rejects_unknown_fields() {
+        // Typos must not silently narrow the audit.
+        let dir = audit_root(
+            "bad",
+            "security:\n  audit:\n    enabled: true\n    fields: [timestamp, bogus]\n",
+        );
+        let err = load_audit(&dir).expect_err("unknown field fails");
+        assert!(err.contains("bogus"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

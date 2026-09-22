@@ -1,4 +1,4 @@
-//! `tuilab-mcp` server: 9 `tui_*` tools over stdio (docs/08).
+//! `tuilab-mcp` server: 10 `tui_*` tools over stdio (docs/08).
 //!
 //! Tracing goes to stderr — stdout belongs to the MCP transport.
 
@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use rmcp::ServiceExt;
 use tui_lab_mcp::handler::TuiLabHandler;
-use tui_lab_mcp::security::load_allowlist;
+use tui_lab_mcp::security::{load_allowlist, load_audit};
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     tracing_subscriber::fmt()
@@ -22,9 +22,16 @@ async fn main() {
             std::process::exit(2);
         }
     };
+    let audit = match load_audit(&root) {
+        Ok(audit) => audit,
+        Err(e) => {
+            eprintln!("config error: {e}");
+            std::process::exit(2);
+        }
+    };
     tracing::info!(root = %root.display(), "tuilab-mcp serving over stdio");
 
-    let handler = TuiLabHandler::new(root, allow);
+    let handler = TuiLabHandler::new(root, allow, audit);
     match handler.serve(rmcp::transport::stdio()).await {
         Ok(running) => {
             if let Err(e) = running.waiting().await {

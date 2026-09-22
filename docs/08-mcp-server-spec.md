@@ -11,7 +11,7 @@ Implementation (Phase 4): `rmcp` 3.x (`server`, `macros`, `schemars`,
 `SessionRegistry` in `tui-lab-core`. Tracing goes to stderr; stdout belongs
 to the transport. Scope is tools only — no prompts/resources.
 
-## 8.1 Tool list (9 tools, small + powerful)
+## 8.1 Tool list (10 tools, small + powerful)
 
 | Tool | Input | Returns |
 |------|-------|---------|
@@ -22,6 +22,7 @@ to the transport. Scope is tools only — no prompts/resources.
 | `tui_wait_for_text` | `{ session_id, text, timeout_ms?, regex? }` | `{ found, elapsed_ms, screen }` |
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
 | `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
+| `tui_resize` | `{ session_id, width, height }` | `{ ok, width, height }` (actual dims after clamping; redraw is async — follow with `tui_wait_for_text`) |
 | `tui_run_test` | `{ test_file, terminal? }` | `{ status, passed, failed, failures[] }` |
 | `tui_close` | `{ session_id, quit? }` | `{ success, exit_code, signal }` |
 
@@ -95,3 +96,24 @@ Prefer Mode B for regression; Mode A for investigation. Do not make the agent pr
 *   `tui_close` always kills process tree; no leaked ConPTY/PTY handles.
 *   Never echo secrets: `tui_type` with `sensitive: true` redacts from logs.
 *   Tool descriptions must instruct agents to use `wait_for_text` after every input.
+
+## 8.5 Call audit log (opt-in JSONL)
+
+`security.audit` in `tuilab.yaml` records every tool call as one JSON line
+(successes and failures alike). Disabled by default.
+
+```yaml
+security:
+  audit:
+    enabled: true
+    path: reports/mcp-audit.jsonl   # default
+    fields: [timestamp, tool, session_id, result]  # default = minimal
+    # extras: args, elapsed_ms
+```
+
+*   Selectable fields: `timestamp` (epoch ms), `tool`, `session_id`,
+    `result` (`ok` or the error string), `args`, `elapsed_ms`. Unknown names
+    are config errors — typos must not silently narrow the audit.
+*   `args` is sensitive-aware: `tui_type` text typed with `sensitive: true`
+    records as `"[redacted]"`. (`tui_close` quit input is logged as given.)
+*   The sink never fails a tool: write errors trace and drop.
