@@ -301,6 +301,7 @@ fn evaluate_assertion(
     cursor: (usize, usize),
     changed: bool,
     exit: (Option<i32>, bool),
+    compiled: Option<&regex::Regex>,
 ) -> StepOutcome {
     let mut conditions = Vec::new();
     if let Some(needle) = &assertion.contains {
@@ -308,9 +309,6 @@ fn evaluate_assertion(
     }
     if let Some(needle) = &assertion.not_contains {
         conditions.push(Condition::TextNotVisible(needle.clone()));
-    }
-    if let Some(pattern) = &assertion.regex {
-        conditions.push(Condition::TextRegex(pattern.clone()));
     }
     if let Some(exact) = &assertion.exact_text {
         conditions.push(Condition::ExactText(exact.clone()));
@@ -348,6 +346,15 @@ fn evaluate_assertion(
             failures.push(verdict.detail);
         }
     }
+    // R1: regex runs against the loop-precompiled pattern — never
+    // recompiled per tick. Invalid patterns never reach here:
+    // `assert_poll` fails them fast up front.
+    if let Some(pattern) = &assertion.regex {
+        let matched = compiled.is_some_and(|compiled| compiled.is_match(screen));
+        if !matched {
+            failures.push(format!("regex did not match: {pattern:?}"));
+        }
+    }
     StepOutcome {
         passed: failures.is_empty(),
         detail: if failures.is_empty() {
@@ -363,6 +370,20 @@ fn evaluate_assertion(
 async fn assert_poll(session: &mut Session<'_>, assertion: &TextAssertion) -> Result<StepOutcome> {
     let poll = session.opts.poll;
     let start = Instant::now();
+    // R1: compile once; an invalid pattern fails fast (same message shape
+    // as `evaluate`, without polling the timeout blind).
+    let compiled = match assertion.regex.as_deref() {
+        Some(pattern) => match regex::Regex::new(pattern) {
+            Ok(compiled) => Some(compiled),
+            Err(e) => {
+                return Ok(StepOutcome {
+                    passed: false,
+                    detail: format!("invalid regex {pattern:?}: {e}"),
+                })
+            }
+        },
+        None => None,
+    };
     // Baseline for `screen_changed`: the screen as last observed before
     // this step's first pump.
     let baseline = session.ctx.prev_screen.clone();
@@ -374,7 +395,14 @@ async fn assert_poll(session: &mut Session<'_>, assertion: &TextAssertion) -> Re
             .try_wait()
             .map_err(|e| CoreError::Pty(e.to_string()))?;
         let exit = tui_lab_pty::utils::exit_view(status.as_ref());
-        let outcome = evaluate_assertion(assertion, &screen, session.emu.cursor(), changed, exit);
+        let outcome = evaluate_assertion(
+            assertion,
+            &screen,
+            session.emu.cursor(),
+            changed,
+            exit,
+            compiled.as_ref(),
+        );
         if outcome.passed {
             return Ok(outcome);
         }
@@ -442,18 +470,33 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
             }
         }
         Step::Resize(to) => {
+            // R6: validate + clamp through the shared guard (never raw u16).
+            if to.width == 0 || to.height == 0 {
+                return Err(CoreError::Message(format!(
+                    "resize needs nonzero dimensions, got {}x{}",
+                    to.width, to.height
+                )));
+            }
+            let (width, height) = tui_lab_terminal::utils::clamp_dims(to.width, to.height);
             session
                 .pty
-                .resize(to.width, to.height)
+                .resize(width, height)
                 .map_err(|e| CoreError::Pty(e.to_string()))?;
-            session.emu.resize(to.width as usize, to.height as usize);
+            session.emu.resize(width as usize, height as usize);
             session
                 .ctx
                 .input_history
-                .push(format!("resize {}x{}", to.width, to.height));
+                .push(format!("resize {width}x{height}"));
             StepOutcome {
                 passed: true,
-                detail: format!("resized to {}x{}", to.width, to.height),
+                detail: if (width, height) == (to.width, to.height) {
+                    format!("resized to {width}x{height}")
+                } else {
+                    format!(
+                        "resized to {width}x{height} (clamped from {}x{})",
+                        to.width, to.height
+                    )
+                },
             }
         }
         Step::AssertText(assertion) | Step::Expect(assertion) => {

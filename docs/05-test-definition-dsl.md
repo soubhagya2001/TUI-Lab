@@ -76,6 +76,8 @@ assertions:
 | `snapshot` / `screenshot` | `{ name, mask? }` | Golden-file compare |
 | `wait_for_exit` | `{ timeout }` | For quit flows |
 
+Durations read as human strings: `500ms`, `3s`, `2m` (bare numbers mean milliseconds).
+
 ## 5.4 Other authoring paths (Phase 5, thin wrappers)
 
 TypeScript:

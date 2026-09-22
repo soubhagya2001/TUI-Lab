@@ -67,6 +67,31 @@ async fn missing_text_times_out_with_evidence() {
 }
 
 #[tokio::test]
+async fn invalid_regex_fails_fast() {
+    // R1: the pattern compiles once — garbage fails immediately with the
+    // error as evidence instead of polling the full timeout.
+    let outcome = wait_for_text(
+        || "nothing here".to_string(),
+        "([",
+        true,
+        Duration::from_secs(5),
+        Duration::from_millis(10),
+    )
+    .await;
+    assert!(!outcome.found);
+    assert!(
+        outcome.elapsed < Duration::from_secs(1),
+        "must not poll blind, took {:?}",
+        outcome.elapsed
+    );
+    assert!(
+        outcome.last_screen.contains("invalid regex"),
+        "{}",
+        outcome.last_screen
+    );
+}
+
+#[tokio::test]
 async fn supervisor_bounds_futures() {
     let fast = run_with_timeout(async { 42 }, Duration::from_secs(1), "fast").await;
     assert_eq!(fast.expect("fast completes"), 42);

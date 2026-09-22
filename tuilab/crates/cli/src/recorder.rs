@@ -21,7 +21,7 @@ use tui_lab_protocol::{Step, SuiteAssertion, TestFile, WaitForText};
 use tui_lab_pty::SpawnOptions;
 
 use crate::constants::{
-    EXIT_CONFIG_ERROR, EXIT_OK, REC_BEAT_WAIT_MS, REC_CHUNK_BYTES, REC_FINISH_BYTE,
+    EXIT_CONFIG_ERROR, EXIT_OK, EXIT_PTY_ERROR, REC_BEAT_WAIT_MS, REC_CHUNK_BYTES, REC_FINISH_BYTE,
     REC_STABILIZE_TIMEOUT_MS, REC_STABLE_POLLS, REC_TICK_MS,
 };
 
@@ -45,7 +45,10 @@ impl RawGuard {
 impl Drop for RawGuard {
     fn drop(&mut self) {
         if self.active {
-            let _ = crossterm::terminal::disable_raw_mode();
+            // R7: Drop cannot fail outward — report, never swallow.
+            if let Err(e) = crossterm::terminal::disable_raw_mode() {
+                eprintln!("warning: raw mode restore failed ({e})");
+            }
         }
     }
 }
@@ -152,7 +155,12 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
             let raw = beat[offset..offset + len].to_vec();
             offset += len;
             if let Ok(session) = registry.get_mut(&id) {
-                let _ = session.pty.write_all(&raw);
+                // R7: a dropped forward desyncs replay from the session —
+                // abort loudly instead of recording a lie.
+                if let Err(e) = session.pty.write_all(&raw) {
+                    eprintln!("record: forward to app failed: {e}");
+                    return EXIT_PTY_ERROR;
+                }
             }
             match key {
                 Key::Char(c) => type_run.push(c),
@@ -371,9 +379,18 @@ fn render_text(text: &str, interactive: bool) {
         return;
     }
     let mut out = std::io::stdout().lock();
-    let _ = out.write_all(b"\x1b[2J\x1b[H");
-    let _ = out.write_all(text.as_bytes());
-    let _ = out.flush();
+    // R7: a dead stdout means nobody sees the session — say so once.
+    if let Err(e) = out.write_all(b"\x1b[2J\x1b[H") {
+        eprintln!("warning: record render failed ({e})");
+        return;
+    }
+    if let Err(e) = out.write_all(text.as_bytes()) {
+        eprintln!("warning: record render failed ({e})");
+        return;
+    }
+    if let Err(e) = out.flush() {
+        eprintln!("warning: record render failed ({e})");
+    }
 }
 
 #[cfg(test)]

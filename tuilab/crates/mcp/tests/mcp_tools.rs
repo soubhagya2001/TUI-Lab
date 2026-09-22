@@ -439,6 +439,43 @@ async fn nonzero_exit_code_asserts() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn zero_wait_timeout_falls_back_to_default() {
+    // R6: explicit timeout_ms 0 means "use the default", not "fail now".
+    let (handler, _root) = open_handler("zero-timeout");
+    let id = handler
+        .tui_launch(Parameters(LaunchParams {
+            command: fixture_bin(),
+            args: vec![],
+            cwd: None,
+            width: 120,
+            height: 40,
+            env: Default::default(),
+        }))
+        .await
+        .expect("launch")
+        .0
+        .session_id;
+    let wait = handler
+        .tui_wait_for_text(Parameters(WaitParams {
+            session_id: id.clone(),
+            text: "TUI-LAB-SAMPLE".to_string(),
+            regex: false,
+            timeout_ms: 0,
+        }))
+        .await
+        .expect("wait")
+        .0;
+    assert!(wait.found, "zero timeout falls back to default");
+    handler
+        .tui_close(Parameters(CloseParams {
+            session_id: id,
+            quit: Some("q".to_string()),
+        }))
+        .await
+        .expect("close");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mode_b_runs_yaml_suite() {
     let (handler, root) = open_handler("mode-b");
     // Mode B resolves suites under the handler root; the test writes its own

@@ -51,9 +51,19 @@ pub async fn serve() -> i32 {
 }
 
 async fn respond(stdout: &mut tokio::io::Stdout, response: &str) {
-    let _ = stdout.write_all(response.as_bytes()).await;
-    let _ = stdout.write_all(b"\n").await;
-    let _ = stdout.flush().await;
+    // R7: a dead stdout means the sidecar gets nothing — stderr is the only
+    // channel left, so report there instead of swallowing.
+    if let Err(e) = stdout.write_all(response.as_bytes()).await {
+        eprintln!("proto respond failed: {e}");
+        return;
+    }
+    if let Err(e) = stdout.write_all(b"\n").await {
+        eprintln!("proto respond failed: {e}");
+        return;
+    }
+    if let Err(e) = stdout.flush().await {
+        eprintln!("proto respond failed: {e}");
+    }
 }
 
 fn error_response(message: &str) -> String {
@@ -262,6 +272,13 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 Ok(session) => session,
                 Err(e) => return error_response(&e.to_string()),
             };
+            // R6: same validate + clamp guard as the runner path.
+            if width == 0 || height == 0 {
+                return error_response(&format!(
+                    "resize needs nonzero dimensions, got {width}x{height}"
+                ));
+            }
+            let (width, height) = tui_lab_terminal::utils::clamp_dims(width, height);
             if let Err(e) = session.pty.resize(width, height) {
                 return error_response(&e.to_string());
             }

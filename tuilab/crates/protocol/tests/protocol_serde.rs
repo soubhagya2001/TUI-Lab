@@ -1,6 +1,6 @@
 //! Protocol wire conformance: JSON actions + YAML test files.
 
-use tui_lab_protocol::{Action, Step, TestFile};
+use tui_lab_protocol::{parse_duration, Action, Step, TestFile};
 
 // --- JSON actions (docs/04 §4.2) ---
 
@@ -183,4 +183,27 @@ fn unsupported_schema_version_is_rejected() {
 #[test]
 fn malformed_yaml_is_rejected() {
     assert!(TestFile::from_yaml("schema: [unclosed").is_err());
+}
+
+#[test]
+fn empty_step_and_assertion_maps_are_errors_not_panics() {
+    // R11: single-key extraction must never panic on empty maps.
+    let yaml = "schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps:\n  - {}\n";
+    assert!(TestFile::from_yaml(yaml).is_err());
+    let yaml = "schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps:\n  - press: q\nassertions:\n  - {}\n";
+    assert!(TestFile::from_yaml(yaml).is_err());
+}
+
+#[test]
+fn durations_parse_units_and_reject_overflow() {
+    // R4: minutes use checked math; bare numbers mean milliseconds.
+    use std::time::Duration;
+    assert_eq!(parse_duration("500ms"), Ok(Duration::from_millis(500)));
+    assert_eq!(parse_duration("500"), Ok(Duration::from_millis(500)));
+    assert_eq!(parse_duration("3s"), Ok(Duration::from_secs(3)));
+    assert_eq!(parse_duration("2m"), Ok(Duration::from_secs(120)));
+    assert!(parse_duration("forever").is_err());
+    assert!(parse_duration("10h").is_err());
+    // u64::MAX minutes overflows seconds — must error, never wrap.
+    assert!(parse_duration("18446744073709551615m").is_err());
 }

@@ -191,7 +191,10 @@ impl SessionRegistry {
         let mut reaped = 0;
         for id in stale {
             if let Some(mut session) = self.sessions.remove(&id) {
-                let _ = session.pty.close(None, Some(Duration::from_secs(2)));
+                // R7: a failed reap-close must not stop the sweep — trace it.
+                if let Err(e) = session.pty.close(None, Some(Duration::from_secs(2))) {
+                    tracing::warn!("reap close of {id} failed: {e}");
+                }
                 reaped += 1;
             }
         }

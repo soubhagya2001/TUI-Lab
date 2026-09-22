@@ -7,10 +7,12 @@
 //!   symlinks resolved).
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::constants::FORBIDDEN_COMMAND;
 
 /// Compiled command allowlist.
+#[derive(Clone, Debug)]
 pub struct Allowlist {
     patterns: Vec<regex::Regex>,
     sources: Vec<String>,
@@ -18,9 +20,17 @@ pub struct Allowlist {
 
 impl Allowlist {
     /// Defaults from the spec: relative launches, `cargo run`, `python`.
+    ///
+    /// R11: patterns compile once behind an `OnceLock` (MSRV-clean, unlike
+    /// `LazyLock`) — no per-call `expect` on the production path.
     pub fn defaults() -> Self {
-        Self::from_sources(&["^\\./.*", "^cargo run.*", "^python.*"])
-            .expect("default allowlist compiles")
+        static DEFAULTS: OnceLock<Allowlist> = OnceLock::new();
+        DEFAULTS
+            .get_or_init(|| {
+                Allowlist::from_sources(&["^\\./.*", "^cargo run.*", "^python.*"])
+                    .expect("default allowlist compiles")
+            })
+            .clone()
     }
 
     /// Compile user patterns; invalid regex is an error, never silent.
@@ -57,9 +67,16 @@ impl Allowlist {
 
 /// Load `security.allow_commands` from `tuilab.yaml`; defaults when absent,
 /// error when malformed.
+///
+/// R8: only a missing file falls back to defaults — other I/O failures are
+/// errors, never silent.
 pub fn load_allowlist(root: &Path) -> Result<Allowlist, String> {
     let path = root.join("tuilab.yaml");
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
     if text.trim().is_empty() {
         return Ok(Allowlist::defaults());
     }
@@ -200,5 +217,18 @@ mod tests {
         let dir = std::env::temp_dir().join("tuilab-mcp-no-config");
         let allow = load_allowlist(&dir).expect("defaults");
         assert!(allow.check("./myapp", &[]).is_ok());
+    }
+
+    #[test]
+    fn unreadable_config_is_an_error() {
+        // R8: only a *missing* file falls back to defaults.
+        let dir =
+            std::env::temp_dir().join(format!("tuilab-mcp-unreadable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        std::fs::create_dir_all(dir.join("tuilab.yaml")).expect("dir as file");
+        let err = load_allowlist(&dir).expect_err("unreadable must fail");
+        assert!(err.contains("read"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

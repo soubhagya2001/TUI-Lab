@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tui_lab_protocol::TestFile;
 
+use crate::error::CoreError;
 use crate::result::{FailureInfo, SuiteResult, TerminalInfo};
 use crate::runner::{run_file_bounded, RunOptions};
 use crate::sessions::DEFAULT_MAX_SESSIONS;
@@ -32,8 +33,19 @@ pub async fn run_suites(
     for (index, (file, opts)) in files.into_iter().enumerate() {
         let permit_source = Arc::clone(&semaphore);
         set.spawn(async move {
-            let _permit = permit_source.acquire_owned().await.expect("semaphore open");
             let name = file.name.clone();
+            // R11: a closed semaphore degrades to an infra failure, never a
+            // panicking worker (the pool is never closed in practice).
+            let _permit = match permit_source.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    return (
+                        index,
+                        name,
+                        Err(CoreError::Message(format!("worker pool closed: {e}"))),
+                    )
+                }
+            };
             // C5: per-suite timeout bounds apply in parallel too.
             let outcome = run_file_bounded(&file, &opts).await;
             (index, name, outcome)

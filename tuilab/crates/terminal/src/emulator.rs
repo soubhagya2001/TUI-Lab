@@ -41,7 +41,11 @@ impl EventListener for ForwardingListener {
     fn send_event(&self, event: Event) {
         if let Event::PtyWrite(text) = event {
             if let Ok(mut sink) = self.sink.lock() {
-                let _ = sink.write_all(text.as_bytes());
+                // R7: a failed handshake reply stalls ConPTY silently —
+                // trace it instead of swallowing.
+                if let Err(e) = sink.write_all(text.as_bytes()) {
+                    tracing::warn!("PtyWrite forward failed: {e}");
+                }
             }
         }
     }

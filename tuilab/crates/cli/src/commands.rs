@@ -25,7 +25,14 @@ pub fn init(dir: &Path) -> i32 {
         );
     } else {
         let config = ProjectConfig::default();
-        let text = serde_yaml::to_string(&config).unwrap_or_default();
+        // R8: a serialize failure must never write an empty yaml.
+        let text = match serde_yaml::to_string(&config) {
+            Ok(text) => text,
+            Err(e) => {
+                eprintln!("serialize default config: {e}");
+                return EXIT_CONFIG_ERROR;
+            }
+        };
         if let Err(e) = std::fs::write(&config_path, text) {
             eprintln!("write {}: {e}", config_path.display());
             return EXIT_CONFIG_ERROR;
@@ -164,14 +171,7 @@ pub async fn run(
                 Err(e) => {
                     // Infrastructure breakdown: launch/PTY/timeout (exits 3/4).
                     eprintln!("{}: {e}", suite_path.display());
-                    let message = e.to_string();
-                    if message.starts_with("launch failed") || message.starts_with("pty failed") {
-                        return EXIT_PTY_ERROR;
-                    }
-                    if message.starts_with("timed out") {
-                        return EXIT_TIMEOUT;
-                    }
-                    return EXIT_TESTS_FAILED;
+                    return exit_for(&e);
                 }
             }
         }
@@ -207,6 +207,19 @@ pub async fn run(
     let passed = results.iter().filter(|result| result.passed).count();
     println!("{passed} passed, {} failed", results.len() - passed);
     exit
+}
+
+/// Map infrastructure errors to CLI exit codes.
+///
+/// R5: matches the `CoreError` enum, never message prefixes — rewording an
+/// error message must not silently change exits.
+fn exit_for(error: &tui_lab_core::error::CoreError) -> i32 {
+    use tui_lab_core::error::CoreError as E;
+    match error {
+        E::Launch(_) | E::Pty(_) => EXIT_PTY_ERROR,
+        E::Timeout(_) => EXIT_TIMEOUT,
+        E::Message(_) => EXIT_TESTS_FAILED,
+    }
 }
 
 /// Read, parse, and tune one suite file. Errors exit before any launch.
@@ -361,4 +374,24 @@ pub fn record(
     });
     let (width, height) = terminal.unwrap_or((120, 40));
     crate::recorder::run(&command, &args, &out, width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// R5: exit codes follow the error enum, not message text.
+    #[test]
+    fn exit_codes_match_error_variants() {
+        use tui_lab_core::error::CoreError as E;
+        assert_eq!(exit_for(&E::Launch("x".into())), EXIT_PTY_ERROR);
+        assert_eq!(exit_for(&E::Pty("x".into())), EXIT_PTY_ERROR);
+        assert_eq!(exit_for(&E::Timeout("x".into())), EXIT_TIMEOUT);
+        // Even a timeout-sounding free message stays exit 1: only the
+        // Timeout variant means exit 4.
+        assert_eq!(
+            exit_for(&E::Message("timed out waiting".into())),
+            EXIT_TESTS_FAILED
+        );
+    }
 }

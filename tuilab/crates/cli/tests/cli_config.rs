@@ -59,3 +59,14 @@ fn unknown_config_keys_are_rejected() {
     assert!(load(&dir).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn unreadable_config_is_an_error_not_defaults() {
+    // R8: a `tuilab.yaml` that cannot be read (here: a directory wearing the
+    // file's name) errors instead of silently yielding defaults.
+    let dir = scratch("unreadable");
+    std::fs::create_dir_all(dir.join("tuilab.yaml")).expect("dir as file");
+    let err = load(&dir).expect_err("unreadable config must fail");
+    assert!(err.contains("read"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

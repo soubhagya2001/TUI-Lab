@@ -39,9 +39,28 @@ where
 {
     let start = Instant::now();
     let mut last_screen = String::new();
+    // R1: compile once per wait, not once per poll tick. An invalid pattern
+    // fails fast with the error as evidence instead of polling blind.
+    let compiled = match regex {
+        true => match regex::Regex::new(needle) {
+            Ok(pattern) => Some(pattern),
+            Err(e) => {
+                return WaitOutcome {
+                    found: false,
+                    elapsed: start.elapsed(),
+                    last_screen: format!("invalid regex {needle:?}: {e}"),
+                }
+            }
+        },
+        false => None,
+    };
     while start.elapsed() < timeout {
         last_screen = screen();
-        if matches(&last_screen, needle, regex) {
+        let hit = match &compiled {
+            Some(pattern) => pattern.is_match(&last_screen),
+            None => last_screen.contains(needle),
+        };
+        if hit {
             return WaitOutcome {
                 found: true,
                 elapsed: start.elapsed(),

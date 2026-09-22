@@ -1369,9 +1369,11 @@ name = "tui-lab-core"
 version = "0.1.0"
 dependencies = [
  "portable-pty",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
  "tui-lab-assertions",
  "tui-lab-input",
  "tui-lab-protocol",
@@ -1464,6 +1466,7 @@ name = "tui-lab-terminal"
 version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
+ "tracing",
  "vte",
 ]
 

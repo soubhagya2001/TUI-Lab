@@ -261,7 +261,11 @@ impl PtySession {
         grace: Option<Duration>,
     ) -> Result<portable_pty::ExitStatus> {
         if let Some(quit) = quit {
-            let _ = self.write_all(quit);
+            // R7: best-effort (the child may already be dead), but trace —
+            // a silent drop here used to mask close-path stalls.
+            if let Err(e) = self.write_all(quit) {
+                tracing::warn!("close quit-bytes write failed: {e}");
+            }
         }
         let grace = grace.unwrap_or(Duration::from_millis(KILL_GRACE_DEFAULT_MS));
         let start = Instant::now();

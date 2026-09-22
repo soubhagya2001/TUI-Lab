@@ -306,8 +306,8 @@ impl Serialize for SuiteAssertion {
 /// Parse `500ms` / `3s` / `2m` (bare numbers mean milliseconds).
 ///
 /// Shared with the CLI so `tuilab.yaml` timeouts parse exactly like suite
-/// timeouts (C5). Unit quirks (`"m"` overflow, bare-number default) are
-/// tracked as R4, not changed here.
+/// timeouts (C5). R4: minutes use checked math (overflow is an error, never
+/// a wrap); the bare-number default is documented here and in docs/05.
 pub fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
     let (number, unit) = raw
         .find(|c: char| c.is_alphabetic())
@@ -319,7 +319,10 @@ pub fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
     match unit.trim() {
         "ms" | "" => Ok(Duration::from_millis(value)),
         "s" => Ok(Duration::from_secs(value)),
-        "m" => Ok(Duration::from_secs(value * 60)),
+        "m" => value
+            .checked_mul(60)
+            .map(Duration::from_secs)
+            .ok_or_else(|| format!("duration overflows: {raw}")),
         other => Err(format!("bad duration unit in {raw}: {other}")),
     }
 }
@@ -361,7 +364,10 @@ impl<'de> Deserialize<'de> for Step {
                 map.len()
             )));
         }
-        let (key, value) = map.into_iter().next().expect("single step");
+        let (key, value) = map
+            .into_iter()
+            .next()
+            .ok_or_else(|| serde::de::Error::custom("step must have exactly one key"))?;
         match key.as_str() {
             "press" => convert::<String>(value).map(Step::Press),
             "type" => convert::<String>(value).map(Step::Type),
@@ -397,7 +403,10 @@ impl<'de> Deserialize<'de> for SuiteAssertion {
                 "assertion must have exactly one key",
             ));
         }
-        let (key, value) = map.into_iter().next().expect("single assertion");
+        let (key, value) = map
+            .into_iter()
+            .next()
+            .ok_or_else(|| serde::de::Error::custom("assertion must have exactly one key"))?;
         match key.as_str() {
             "exit_code" | "assert_exit_code" => convert::<i32>(value).map(SuiteAssertion::ExitCode),
             "process_not_crashed" | "assert_process_not_crashed" => {

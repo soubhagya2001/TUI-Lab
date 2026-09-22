@@ -143,10 +143,17 @@ fn default_parallel() -> usize {
     4
 }
 
-/// Load `tuilab.yaml` from `dir` (defaults when absent, error when malformed).
+/// Load `tuilab.yaml` from `dir`.
+///
+/// R8: a missing file means defaults; any other I/O failure (permissions,
+/// path-is-a-directory, …) is an error, never silent defaults.
 pub fn load(dir: &Path) -> Result<ProjectConfig, String> {
     let path = dir.join(CONFIG_FILE);
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
     if text.trim().is_empty() {
         return Ok(ProjectConfig::default());
     }

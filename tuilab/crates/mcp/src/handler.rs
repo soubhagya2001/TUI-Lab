@@ -247,7 +247,10 @@ impl TuiLabHandler {
         params: Parameters<WaitParams>,
     ) -> Result<Json<WaitOut>, String> {
         let params = params.0;
-        let timeout = Duration::from_millis(params.timeout_ms);
+        // R6: an explicit zero timeout means "use the default", never
+        // "fail instantly".
+        let timeout =
+            Duration::from_millis(tui_lab_core::utils::clamp_timeout_ms(params.timeout_ms));
         let poll = Duration::from_millis(50);
         let start = std::time::Instant::now();
         let mut last_screen = String::new();

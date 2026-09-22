@@ -305,3 +305,60 @@ steps:
         "exit-4 mapping, got: {err}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn zero_resize_is_rejected() {
+    // R6: zero dimensions are invalid input, never a silent PTY call.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: zero-resize
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - resize:
+      width: 0
+      height: 24
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let err = run_file(&file, &opts())
+        .await
+        .expect_err("zero resize must fail");
+    assert!(err.to_string().contains("nonzero"), "got: {err}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn oversize_resize_is_clamped() {
+    // R6: absurd dimensions clamp to materialization limits and say so.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: big-resize
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - resize:
+      width: 9999
+      height: 9999
+  - press: q
+assertions:
+  - exit_code: 0
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(result.passed, "clamped resize must pass");
+    assert!(
+        result.steps[1].detail.contains("clamped"),
+        "detail names the clamp: {}",
+        result.steps[1].detail
+    );
+}
