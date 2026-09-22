@@ -1,4 +1,8 @@
-//! Locate the `tuilab` binary: explicit → TUILAB_BIN → PATH → workspace.
+//! Locate the `tuilab` binary: explicit → TUILAB_BIN → workspace → PATH.
+//!
+//! K2: PATH is deliberately last. An installed `tuilab` entry point may be
+//! a same-named launcher, which must never shadow the workspace build or a
+//! `TUILAB_BIN` override during development.
 
 use std::path::{Path, PathBuf};
 
@@ -21,9 +25,6 @@ pub fn find_binary(explicit: Option<&Path>) -> Result<PathBuf, TuiLabError> {
             return Ok(path);
         }
     }
-    if let Some(path) = search_path() {
-        return Ok(path);
-    }
     // src files live at sdks/rust/src → walk up to tuilab/ → target/debug.
     if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
         let candidate = PathBuf::from(manifest)
@@ -35,6 +36,9 @@ pub fn find_binary(explicit: Option<&Path>) -> Result<PathBuf, TuiLabError> {
         if candidate.is_file() {
             return Ok(candidate);
         }
+    }
+    if let Some(path) = search_path() {
+        return Ok(path);
     }
     Err(TuiLabError::new(
         "tuilab binary not found: set TUILAB_BIN, add it to PATH, \

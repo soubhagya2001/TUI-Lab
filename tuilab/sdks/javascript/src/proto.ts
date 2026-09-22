@@ -77,7 +77,13 @@ export class Connection {
     });
   }
 
+  private closed = false;
+
   async close(): Promise<void> {
+    // Idempotent (K4): a second close returns at once instead of throwing
+    // through the caller's finally and masking real errors.
+    if (this.closed) return;
+    this.closed = true;
     this.proc.stdin!.end();
     await new Promise<void>((resolve) => {
       const done = () => resolve();

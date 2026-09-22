@@ -93,33 +93,32 @@ export class TuiTest {
     );
   }
 
-  /** Current screen grid (text, cursor, dimensions). */
-  async screen(): Promise<JsonDict> {
-    return check(
-      await this.conn.request({
-        action: "screen",
-        session_id: this.sessionId,
-      }),
-      "screen"
-    );
+  /** Current screen grid (text, cursor, dimensions; cells when styled). */
+  async screen(styled = false): Promise<JsonDict> {
+    const action: JsonDict = {
+      action: "screen",
+      session_id: this.sessionId,
+    };
+    if (styled) action["styled"] = true;
+    return check(await this.conn.request(action), "screen");
   }
 
   /** Poll until text is visible; raise with the last screen on timeout. */
   async expectText(
     text: string,
     timeoutMs = 10_000,
-    regex = false
+    regex = false,
+    pollMs?: number
   ): Promise<string> {
-    const reply = check(
-      await this.conn.request({
-        action: "wait_for_text",
-        session_id: this.sessionId,
-        text,
-        regex,
-        timeout_ms: timeoutMs,
-      }),
-      "wait_for_text"
-    );
+    const action: JsonDict = {
+      action: "wait_for_text",
+      session_id: this.sessionId,
+      text,
+      regex,
+      timeout_ms: timeoutMs,
+    };
+    if (pollMs !== undefined) action["poll_ms"] = pollMs;
+    const reply = check(await this.conn.request(action), "wait_for_text");
     if (reply["found"] !== true) {
       throw new TuiLabError(`timed out waiting for ${JSON.stringify(text)}`, reply);
     }
@@ -146,6 +145,27 @@ export class TuiTest {
     );
   }
 
+  /**
+   * Evaluate a raw engine condition (K1), e.g.
+   * `{ type: "text_visible", text: "Dashboard" }` or
+   * `{ type: "exit_code", code: 0 }`. Returns the reply
+   * (`passed` + `detail`); throws only on transport errors.
+   */
+  async assert(condition: JsonDict): Promise<JsonDict> {
+    const reply = await this.conn.request({
+      action: "assert",
+      session_id: this.sessionId,
+      condition,
+    });
+    if (reply["ok"] !== true) {
+      throw new TuiLabError(
+        `assert failed: ${String(reply["error"] ?? "unknown")}`,
+        reply
+      );
+    }
+    return reply;
+  }
+
   /** Resize the terminal. */
   async resize(width: number, height: number): Promise<void> {
     check(
@@ -159,16 +179,26 @@ export class TuiTest {
     );
   }
 
-  /** Close the session and reap the child. */
-  async close(): Promise<JsonDict> {
+  /**
+   * Close the session and reap the child (idempotent, K4). `quit` sends
+   * quit input first for a graceful exit; `timeoutMs` bounds the wait
+   * before kill. A second call returns immediately.
+   */
+  private closed = false;
+
+  async close(quit?: string, timeoutMs?: number): Promise<JsonDict> {
+    if (this.closed) {
+      return { ok: true, detail: "already closed" };
+    }
+    this.closed = true;
     try {
-      return check(
-        await this.conn.request({
-          action: "close",
-          session_id: this.sessionId,
-        }),
-        "close"
-      );
+      const action: JsonDict = {
+        action: "close",
+        session_id: this.sessionId,
+      };
+      if (quit !== undefined) action["signal"] = quit;
+      if (timeoutMs !== undefined) action["timeout_ms"] = timeoutMs;
+      return check(await this.conn.request(action), "close");
     } finally {
       await this.conn.close();
     }
@@ -176,11 +206,27 @@ export class TuiTest {
 }
 
 export class Runner {
+  /**
+   * Read and parse a results file, rejecting missing or stale output (K3).
+   * `startedMs` is the run's start time; a file older than the run is a
+   * leftover that must never pass as fresh output.
+   */
+  static readResultsFile(resultsPath: string, startedMs: number): JsonDict[] {
+    if (!fs.existsSync(resultsPath)) {
+      throw new TuiLabError("tuilab run produced no reports/results.json");
+    }
+    if (fs.statSync(resultsPath).mtimeMs < startedMs) {
+      throw new TuiLabError("reports/results.json is older than this run (stale results?)");
+    }
+    return JSON.parse(fs.readFileSync(resultsPath, "utf8")) as JsonDict[];
+  }
+
   /** YAML suites through `tuilab run` (canonical format, docs/05). */
   static async run(
     testFile: string,
     binary?: string
   ): Promise<JsonDict[]> {
+    const started = Date.now();
     const { stdout } = await execFileAsync(findBinary(binary), [
       "run",
       testFile,
@@ -193,10 +239,6 @@ export class Runner {
     });
     void stdout;
     // Results land next to the invoker's CWD (reports/results.json).
-    const resultsPath = path.resolve("reports/results.json");
-    if (!fs.existsSync(resultsPath)) {
-      throw new TuiLabError("tuilab run produced no reports/results.json");
-    }
-    return JSON.parse(fs.readFileSync(resultsPath, "utf8")) as JsonDict[];
+    return Runner.readResultsFile(path.resolve("reports/results.json"), started);
   }
 }

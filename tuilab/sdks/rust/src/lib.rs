@@ -11,10 +11,10 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), tui_lab_sdk::TuiLabError> {
 //!     let mut tui = TuiTest::launch("./myapp", LaunchOptions::new()).await?;
-//!     tui.expect_text("Welcome", 10_000, false).await?;
+//!     tui.expect_text("Welcome", 10_000, false, None).await?;
 //!     tui.press("ENTER").await?;
-//!     tui.expect_text("Dashboard", 10_000, false).await?;
-//!     tui.close().await?;
+//!     tui.expect_text("Dashboard", 10_000, false, None).await?;
+//!     tui.close(None, None).await?;
 //!     Ok(())
 //! }
 //! ```

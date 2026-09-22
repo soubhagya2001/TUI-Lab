@@ -175,10 +175,7 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             })
             .to_string()
         }
-        Action::Screen {
-            session_id,
-            styled: _,
-        } => {
+        Action::Screen { session_id, styled } => {
             let session = match registry.get_mut(&session_id) {
                 Ok(session) => session,
                 Err(e) => return error_response(&e.to_string()),
@@ -186,12 +183,34 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             let text = SessionRegistry::pump_once(session, Duration::from_millis(100));
             let (width, height) = session.emu.dims();
             let (row, col) = session.emu.cursor();
+            // K1: styled cells were accepted but discarded — wire them like
+            // the MCP `tui_screen` path so SDKs can read styles over proto.
+            let cells = styled.then(|| {
+                session
+                    .emu
+                    .cells()
+                    .into_iter()
+                    .map(|cell| {
+                        serde_json::json!({
+                            "x": cell.x,
+                            "y": cell.y,
+                            "char": cell.character.to_string(),
+                            "fg": cell.fg,
+                            "bg": cell.bg,
+                            "bold": cell.bold,
+                            "underline": cell.underline,
+                            "reverse": cell.reverse,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            });
             serde_json::json!({
                 "ok": true,
                 "width": width,
                 "height": height,
                 "cursor": {"row": row, "col": col},
                 "text": text,
+                "cells": cells,
             })
             .to_string()
         }

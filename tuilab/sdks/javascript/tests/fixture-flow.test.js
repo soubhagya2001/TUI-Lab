@@ -96,3 +96,54 @@ assertions:
     assert.ok(fs.existsSync(findBinary()));
   });
 });
+
+describe("K1-K4 surface", () => {
+  it("assert() passes conditions through", async () => {
+    const session = await TuiTest.launch(FIXTURE);
+    try {
+      await session.expectText("TUI-LAB-SAMPLE");
+      const passed = await session.assert({ type: "text_visible", text: "TUI-LAB-SAMPLE" });
+      assert.equal(passed.passed, true);
+      const failed = await session.assert({ type: "text_visible", text: "no-such-screen" });
+      assert.equal(failed.passed, false);
+      await assert.rejects(session.assert({ type: "no-such-condition" }), TuiLabError);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("screen styled returns cells, waits accept pollMs", async () => {
+    const session = await TuiTest.launch(FIXTURE);
+    try {
+      const screen = await session.expectText("TUI-LAB-SAMPLE", 10_000, false, 25);
+      assert.ok(screen.includes("TUI-LAB-SAMPLE"));
+      const styled = await session.screen(true);
+      assert.ok(Array.isArray(styled.cells) && styled.cells.length > 0);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("close with quit is clean and idempotent", async () => {
+    const session = await TuiTest.launch(FIXTURE);
+    await session.expectText("TUI-LAB-SAMPLE");
+    const first = await session.close("q");
+    assert.equal(first.ok, true);
+    const second = await session.close();
+    assert.equal(second.ok, true);
+    assert.equal(second.detail, "already closed");
+  });
+
+  it("Runner rejects stale results", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tuilab-js-stale-"));
+    const target = path.join(dir, "results.json");
+    fs.writeFileSync(target, "[]");
+    const old = Date.now() - 60_000;
+    fs.utimesSync(target, new Date(old), new Date(old));
+    assert.throws(() => Runner.readResultsFile(target, Date.now()), /stale/);
+    fs.writeFileSync(target, '[{"passed": true}]');
+    assert.deepEqual(Runner.readResultsFile(target, Date.now() - 1000), [{ passed: true }]);
+    assert.throws(() => Runner.readResultsFile(path.join(dir, "missing.json"), 0), /no reports/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

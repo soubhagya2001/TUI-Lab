@@ -105,17 +105,21 @@ class Connection:
 
     def __init__(self, proc: asyncio.subprocess.Process) -> None:
         self._proc = proc
+        self._closed = False
 
     @classmethod
     async def spawn(
         cls, binary: str | os.PathLike[str] | None = None
     ) -> "Connection":
+        # Styled screens serialize every cell (~0.5MB at 120x40): raise the
+        # 64KB default readline limit or large replies die in the transport.
         proc = await asyncio.create_subprocess_exec(
             str(find_binary(binary)),
             "proto",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=None,
+            limit=4 * 1024 * 1024,
         )
         return cls(proc)
 
@@ -133,7 +137,10 @@ class Connection:
             raise TuiLabError(f"proto returned non-JSON: {line!r}") from exc
 
     async def close(self) -> None:
-        """EOF the engine and reap the process."""
+        """EOF the engine and reap the process (idempotent, K4)."""
+        if self._closed:
+            return
+        self._closed = True
         if self._proc.stdin:
             self._proc.stdin.close()
         try:

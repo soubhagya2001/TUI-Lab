@@ -91,13 +91,13 @@ impl TuiTest {
         Ok(())
     }
 
-    /// Current screen grid (text, cursor, dimensions).
-    pub async fn screen(&mut self) -> Result<Value, TuiLabError> {
-        self.act(
-            json!({"action": "screen", "session_id": self.session_id}),
-            "screen",
-        )
-        .await
+    /// Current screen grid (text, cursor, dimensions; cells when styled).
+    pub async fn screen(&mut self, styled: bool) -> Result<Value, TuiLabError> {
+        let mut action = json!({"action": "screen", "session_id": self.session_id});
+        if styled {
+            action["styled"] = Value::Bool(true);
+        }
+        self.act(action, "screen").await
     }
 
     /// Poll until text is visible; raise with the last screen on timeout.
@@ -106,14 +106,14 @@ impl TuiTest {
         text: &str,
         timeout_ms: u64,
         regex: bool,
+        poll_ms: Option<u64>,
     ) -> Result<String, TuiLabError> {
-        let reply = self
-            .act(
-                json!({"action": "wait_for_text", "session_id": self.session_id,
-                       "text": text, "regex": regex, "timeout_ms": timeout_ms}),
-                "wait_for_text",
-            )
-            .await?;
+        let mut action = json!({"action": "wait_for_text", "session_id": self.session_id,
+                   "text": text, "regex": regex, "timeout_ms": timeout_ms});
+        if let Some(poll) = poll_ms {
+            action["poll_ms"] = Value::from(poll);
+        }
+        let reply = self.act(action, "wait_for_text").await?;
         if reply.get("found") != Some(&Value::Bool(true)) {
             return Err(TuiLabError::with_detail(
                 format!("timed out waiting for {text:?}"),
@@ -129,7 +129,7 @@ impl TuiTest {
 
     /// Assert text is absent from the current screen.
     pub async fn expect_not_text(&mut self, text: &str) -> Result<(), TuiLabError> {
-        let screen = self.screen().await?;
+        let screen = self.screen(false).await?;
         let body = screen
             .get("text")
             .and_then(Value::as_str)
@@ -152,6 +152,29 @@ impl TuiTest {
         .await
     }
 
+    /// Evaluate a raw engine condition, e.g. `{"type": "text_visible",
+    /// "text": "Dashboard"}` or `{"type": "exit_code", "code": 0}`.
+    /// Returns the reply (`passed` + `detail`); raises only on transport
+    /// errors.
+    pub async fn assert(&mut self, condition: Value) -> Result<Value, TuiLabError> {
+        let reply = self
+            .act(
+                json!({"action": "assert", "session_id": self.session_id, "condition": condition}),
+                "assert",
+            )
+            .await?;
+        if reply.get("ok") != Some(&Value::Bool(true)) {
+            return Err(TuiLabError::with_detail(
+                format!(
+                    "assert failed: {}",
+                    reply.get("error").unwrap_or(&Value::Null)
+                ),
+                reply,
+            ));
+        }
+        Ok(reply)
+    }
+
     /// Resize the terminal.
     pub async fn resize(&mut self, width: u16, height: u16) -> Result<(), TuiLabError> {
         self.act(
@@ -163,13 +186,22 @@ impl TuiTest {
     }
 
     /// Close the session and reap the child (and the sidecar).
-    pub async fn close(mut self) -> Result<Value, TuiLabError> {
-        let reply = self
-            .act(
-                json!({"action": "close", "session_id": self.session_id}),
-                "close",
-            )
-            .await;
+    ///
+    /// Consuming `self` makes double-close impossible at the type level
+    /// (K4). `quit` sends quit input first for a graceful exit.
+    pub async fn close(
+        mut self,
+        quit: Option<&str>,
+        timeout_ms: Option<u64>,
+    ) -> Result<Value, TuiLabError> {
+        let mut action = json!({"action": "close", "session_id": self.session_id});
+        if let Some(quit) = quit {
+            action["signal"] = Value::String(quit.to_string());
+        }
+        if let Some(timeout) = timeout_ms {
+            action["timeout_ms"] = Value::from(timeout);
+        }
+        let reply = self.act(action, "close").await;
         self.conn.close().await.ok();
         reply
     }
@@ -181,6 +213,9 @@ pub struct Runner;
 impl Runner {
     /// Run a suite file; return parsed results (raise on infra failures).
     pub async fn run(test_file: &Path, binary: Option<&Path>) -> Result<Vec<Value>, TuiLabError> {
+        // K3: the engine owns the output path, so staleness is checked by
+        // mtime — a leftover must never pass as fresh output.
+        let started = std::time::SystemTime::now();
         let output = tokio::process::Command::new(find_binary(binary)?)
             .arg("run")
             .arg(test_file)
@@ -202,7 +237,27 @@ impl Runner {
             )));
         }
         // Results land next to the invoker's CWD (reports/results.json).
-        let text = std::fs::read_to_string("reports/results.json")
+        Self::read_results("reports/results.json", started)
+    }
+}
+
+impl Runner {
+    /// Read and parse a results file, rejecting missing or stale output.
+    pub fn read_results(
+        path: &str,
+        started: std::time::SystemTime,
+    ) -> Result<Vec<Value>, TuiLabError> {
+        let metadata =
+            std::fs::metadata(path).map_err(|e| TuiLabError::new(format!("read results: {e}")))?;
+        let modified = metadata
+            .modified()
+            .map_err(|e| TuiLabError::new(format!("read results: {e}")))?;
+        if modified < started {
+            return Err(TuiLabError::new(
+                "reports/results.json is older than this run (stale results?)".to_string(),
+            ));
+        }
+        let text = std::fs::read_to_string(path)
             .map_err(|e| TuiLabError::new(format!("read results: {e}")))?;
         serde_json::from_str(&text).map_err(|e| TuiLabError::new(format!("parse results: {e}")))
     }

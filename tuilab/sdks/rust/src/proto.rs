@@ -85,7 +85,7 @@ impl Connection {
 }
 
 /// Launch options, mirroring the other SDKs.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LaunchOptions {
     /// CLI arguments.
     pub args: Vec<String>,
@@ -108,6 +108,20 @@ impl LaunchOptions {
             width: 120,
             height: 40,
             ..Default::default()
+        }
+    }
+}
+
+impl Default for LaunchOptions {
+    /// K2: a usable 120x40 terminal — never a 0x0 PTY.
+    fn default() -> Self {
+        Self {
+            args: Vec::new(),
+            cwd: None,
+            env: std::collections::HashMap::new(),
+            width: 120,
+            height: 40,
+            binary: None,
         }
     }
 }
