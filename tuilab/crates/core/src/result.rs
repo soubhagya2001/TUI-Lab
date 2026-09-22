@@ -38,6 +38,22 @@ pub struct SuiteResult {
     pub failure: Option<FailureInfo>,
     /// Terminal the suite ran under.
     pub terminal: TerminalInfo,
+    /// Captured PTY bytes for trace replay (in-memory only: skipped in
+    /// JSON so reports stay lean; see reporter `trace`).
+    #[serde(skip_serializing, default)]
+    pub trace: Vec<TraceChunk>,
+    /// True when byte capture hit the cap (replay is a prefix).
+    #[serde(skip_serializing, default)]
+    pub trace_truncated: bool,
+}
+
+/// One raw PTY read with its run-relative timestamp (trace replay pacing).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TraceChunk {
+    /// Milliseconds from run start.
+    pub at_ms: u64,
+    /// Raw bytes read.
+    pub bytes: Vec<u8>,
 }
 
 /// One executed step.
@@ -54,6 +70,10 @@ pub struct StepResult {
     pub detail: String,
     /// Step duration in milliseconds.
     pub duration_ms: u64,
+    /// Milliseconds from run start to step start (trace timeline).
+    /// Absent in results written before traces (back-compatible via default).
+    #[serde(default)]
+    pub started_ms: u64,
 }
 
 /// First-failure evidence (docs/11 §11.3, Phase 3 subset).

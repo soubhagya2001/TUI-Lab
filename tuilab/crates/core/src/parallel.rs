@@ -98,5 +98,7 @@ fn infra_failure(suite: String, error: &str) -> SuiteResult {
             height: 0,
             term: String::new(),
         },
+        trace: Vec::new(),
+        trace_truncated: false,
     }
 }

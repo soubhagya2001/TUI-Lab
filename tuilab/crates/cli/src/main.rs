@@ -44,6 +44,10 @@ enum Commands {
         /// Run only suites carrying any of these tags (comma-separated).
         #[arg(long, value_delimiter = ',')]
         tags: Vec<String>,
+        /// Trace capture: `always` writes a trace.zip per suite, `never`
+        /// disables; absent keeps retain-on-failure.
+        #[arg(long, value_parser = ["always", "never"])]
+        trace: Option<String>,
     },
     /// Re-render stored results (junit for now).
     Report {
@@ -74,6 +78,14 @@ enum Commands {
     },
     /// JSON-lines engine mode for SDK sidecars (docs/09).
     Proto,
+    /// Render a trace.zip timeline, or replay its raw bytes (`--replay`).
+    Trace {
+        /// Trace archive from a run.
+        zip: PathBuf,
+        /// Stream raw PTY bytes to stdout with original pacing.
+        #[arg(long)]
+        replay: bool,
+    },
 }
 
 /// Parse `120x40` terminal geometry.
@@ -105,6 +117,7 @@ async fn main() {
             shard,
             retries,
             tags,
+            trace,
         } => {
             commands::run(commands::RunArgs {
                 path: path.as_deref(),
@@ -115,6 +128,7 @@ async fn main() {
                 shard,
                 retries,
                 tags: &tags,
+                trace: trace.as_deref(),
             })
             .await
         }
@@ -130,6 +144,7 @@ async fn main() {
             terminal,
         } => commands::record(command, arg, out, terminal),
         Commands::Proto => proto::serve().await,
+        Commands::Trace { zip, replay } => commands::trace(&zip, replay),
     };
     std::process::exit(code);
 }

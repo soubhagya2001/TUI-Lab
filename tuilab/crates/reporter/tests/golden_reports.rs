@@ -23,6 +23,7 @@ fn fixture_result() -> SuiteResult {
                 passed: true,
                 detail: "found".to_string(),
                 duration_ms: 120,
+                started_ms: 0,
             },
             StepResult {
                 index: 1,
@@ -30,6 +31,7 @@ fn fixture_result() -> SuiteResult {
                 passed: false,
                 detail: "expected visible text \"Dash\"".to_string(),
                 duration_ms: 30,
+                started_ms: 120,
             },
         ],
         failure: Some(FailureInfo {
@@ -45,6 +47,8 @@ fn fixture_result() -> SuiteResult {
             height: 40,
             term: "xterm-256color".to_string(),
         },
+        trace: Vec::new(),
+        trace_truncated: false,
     }
 }
 

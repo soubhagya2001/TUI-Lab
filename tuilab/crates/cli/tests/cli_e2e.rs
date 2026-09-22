@@ -446,3 +446,77 @@ fn skipped_suite_never_fails() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn failing_suite_writes_trace_zip() {
+    // P5-B1: failures retain a trace.zip with timeline + raw bytes.
+    let dir = scratch("trace");
+    let suite = write(
+        &dir,
+        "failing.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: tracer\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - assert_text:\n      contains: \"no-such-screen\"\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1), "suite fails");
+    let zip = dir.join("reports").join("traces").join("tracer.zip");
+    assert!(zip.is_file(), "trace.zip retained on failure");
+    // The timeline renders step rows plus the failure.
+    let rendered = Command::new(tuilab())
+        .arg("trace")
+        .arg(&zip)
+        .current_dir(&dir)
+        .output()
+        .expect("trace render");
+    assert!(rendered.status.success());
+    let stdout = String::from_utf8_lossy(&rendered.stdout);
+    assert!(
+        stdout.contains("trace: tracer"),
+        "timeline header:\n{stdout}"
+    );
+    assert!(stdout.contains("wait_for_text"), "step rows:\n{stdout}");
+    assert!(stdout.contains("failure at step"), "failure:\n{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn trace_replay_streams_raw_bytes() {
+    // P5-B1: --replay emits the captured PTY bytes (boot screen included).
+    let dir = scratch("replay");
+    let suite = write(
+        &dir,
+        "failing.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: replay\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - assert_text:\n      contains: \"no-such-screen\"\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1));
+    let zip = dir.join("reports").join("traces").join("replay.zip");
+    let replayed = Command::new(tuilab())
+        .arg("trace")
+        .arg(&zip)
+        .arg("--replay")
+        .current_dir(&dir)
+        .output()
+        .expect("trace replay");
+    assert!(replayed.status.success());
+    assert!(
+        String::from_utf8_lossy(&replayed.stdout).contains("TUI-LAB-SAMPLE"),
+        "replay streams boot bytes"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -11,3 +11,7 @@ pub const DEFAULT_POLL_MS: u64 = 50;
 pub const MAX_SESSIONS: usize = 8;
 /// Idle sessions are reaped after this long.
 pub const IDLE_TIMEOUT_SECS: u64 = 60;
+/// Cap on raw PTY bytes retained per run for trace replay (256 KiB).
+/// Capture stops beyond this (replay covers the prefix); boot output,
+/// which matters most, always fits.
+pub const TRACE_MAX_BYTES: usize = 256 * 1024;

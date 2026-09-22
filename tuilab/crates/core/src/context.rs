@@ -5,6 +5,8 @@
 
 use std::time::Instant;
 
+use crate::result::TraceChunk;
+
 /// Live state for one suite execution (single session in Phase 3).
 pub struct TestContext {
     /// Session id (`sess_001`, …).
@@ -19,6 +21,12 @@ pub struct TestContext {
     pub input_history: Vec<String>,
     /// Screen from the previous pump (C3: `screen_changed` baseline).
     pub prev_screen: String,
+    /// Captured PTY reads for trace replay (capped; see `TRACE_MAX_BYTES`).
+    pub trace: Vec<TraceChunk>,
+    /// Kept byte count (cap accounting without re-summing).
+    pub trace_bytes: usize,
+    /// True once capture hit the cap (replay is a prefix).
+    pub trace_truncated: bool,
 }
 
 impl TestContext {
@@ -31,6 +39,9 @@ impl TestContext {
             step_index: 0,
             input_history: Vec::new(),
             prev_screen: String::new(),
+            trace: Vec::new(),
+            trace_bytes: 0,
+            trace_truncated: false,
         }
     }
 

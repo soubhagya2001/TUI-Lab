@@ -34,7 +34,15 @@ reports stay diffable run-over-run.
 
 ## 11.3 Failure bundle (capture on every failure)
 
-Phase 3 implements the core subset; env redaction beyond `sensitive`
+Failing suites additionally retain `reports/traces/<suite>.zip`: a
+dependency-free stored-zip holding `trace.json` (step timeline with
+`started_ms`/`duration_ms`, failure evidence, chunk index) and `pty.bin`
+(raw bytes, capped at 256 KiB). `tuilab trace <zip>` renders the timeline;
+`tuilab trace <zip> --replay` streams the bytes with original pacing
+(gaps capped at 1s). Use `--trace always|never` to override the
+retain-on-failure default.
+
+Phase 3 implements the core subset; env redaction beyond `sensitive
 typing is future work. Child `stderr` shares the PTY stream: `portable-pty`
 0.9 exposes no stderr redirect (verified in vendored source — stdio is
 hardwired to the slave), and per-OS shell-wrapper redirection was rejected

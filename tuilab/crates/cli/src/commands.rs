@@ -12,7 +12,9 @@ use crate::constants::{
 };
 use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult, TerminalInfo};
 use tui_lab_protocol::TestFile;
-use tui_lab_reporter::{load_json_all, write_json_all};
+use tui_lab_reporter::{
+    load_json_all, read_trace, render_timeline, replay_schedule, write_json_all, write_trace,
+};
 
 /// Scaffold `tuilab.yaml` + `tests/smoke.yaml` in `dir`.
 pub fn init(dir: &Path) -> i32 {
@@ -140,6 +142,9 @@ pub struct RunArgs<'a> {
     pub retries: usize,
     /// Run only suites carrying any of these tags.
     pub tags: &'a [String],
+    /// Trace capture: `Some("always")` writes a trace.zip per suite,
+    /// `Some("never")` disables; `None` keeps retain-on-failure.
+    pub trace: Option<&'a str>,
 }
 
 /// Run suites (sequentially or in parallel); returns the CLI exit code.
@@ -158,6 +163,7 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
         shard,
         retries,
         tags,
+        trace,
     } = args;
     if step_mode {
         eprintln!("step mode: Enter continues each step, q aborts the run");
@@ -302,6 +308,8 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
     ordered.sort_by_key(|(index, _)| *index);
     let results: Vec<SuiteResult> = ordered.into_iter().map(|(_, result)| result).collect();
 
+    write_traces(&results, trace);
+
     let report_path = PathBuf::from(&config.report.json);
     if let Err(e) = write_json_all(&report_path, &results) {
         eprintln!("write {}: {e}", report_path.display());
@@ -385,6 +393,8 @@ fn skipped_result(name: &str) -> SuiteResult {
             height: 0,
             term: String::new(),
         },
+        trace: Vec::new(),
+        trace_truncated: false,
     }
 }
 
@@ -514,6 +524,63 @@ fn print_debug(result: &SuiteResult) {
             step.index, step.kind, step.detail, step.duration_ms
         );
     }
+}
+
+/// Write `reports/traces/<suite>.zip` for failed suites — or every suite
+/// with `--trace always` (`never` disables). Skipped suites have no run.
+fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
+    if trace == Some("never") {
+        return;
+    }
+    let always = trace == Some("always");
+    for result in results {
+        if result.skipped || (result.passed && !always) {
+            continue;
+        }
+        let safe: String = result
+            .suite
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let path = PathBuf::from("reports/traces").join(format!("{safe}.zip"));
+        match write_trace(&path, result) {
+            Ok(()) => eprintln!("trace: {}", path.display()),
+            Err(e) => eprintln!("warning: trace write {}: {e}", path.display()),
+        }
+    }
+}
+
+/// Render a trace timeline, or replay its raw bytes with original pacing.
+pub fn trace(zip: &Path, replay: bool) -> i32 {
+    let trace = match read_trace(zip) {
+        Ok(trace) => trace,
+        Err(e) => {
+            eprintln!("read {}: {e}", zip.display());
+            return EXIT_CONFIG_ERROR;
+        }
+    };
+    if !replay {
+        print!("{}", render_timeline(&trace));
+        return EXIT_OK;
+    }
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    for (bytes, wait_ms) in replay_schedule(&trace, 1000) {
+        if wait_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+        }
+        if out.write_all(&bytes).is_err() {
+            return EXIT_OK;
+        }
+    }
+    let _ = out.flush();
+    EXIT_OK
 }
 
 /// Re-render stored JSON results as JUnit or self-contained HTML.

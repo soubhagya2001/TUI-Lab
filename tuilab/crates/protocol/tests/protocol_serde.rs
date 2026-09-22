@@ -188,10 +188,9 @@ fn malformed_yaml_is_rejected() {
 #[test]
 fn tags_skip_focus_parse_with_defaults() {
     // Phase A: selection metadata is optional and defaults to run-everything.
-    let plain = TestFile::from_yaml(
-        "schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps: []\n",
-    )
-    .expect("parse");
+    let plain =
+        TestFile::from_yaml("schema: tui-lab/v1\nname: x\napplication:\n  command: y\nsteps: []\n")
+            .expect("parse");
     assert!(plain.tags.is_empty());
     assert!(!plain.skip);
     assert!(!plain.focus);

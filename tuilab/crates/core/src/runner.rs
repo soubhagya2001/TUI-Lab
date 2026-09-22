@@ -143,6 +143,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
             }
             ctx.step_index = results.len();
             let step_started = Instant::now();
+            let step_started_ms = step_started.duration_since(ctx.started_at).as_millis() as u64;
             let outcome = run_step(
                 &mut Session {
                     ctx: &mut ctx,
@@ -160,6 +161,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                 passed,
                 detail: outcome.detail.clone(),
                 duration_ms: step_started.elapsed().as_millis() as u64,
+                started_ms: step_started_ms,
             });
             if !passed {
                 failure = Some(FailureInfo {
@@ -184,6 +186,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
     for step in &file.cleanup {
         ctx.step_index = results.len();
         let step_started = Instant::now();
+        let step_started_ms = step_started.duration_since(ctx.started_at).as_millis() as u64;
         let outcome = run_step(
             &mut Session {
                 ctx: &mut ctx,
@@ -200,6 +203,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
             passed: outcome.passed,
             detail: outcome.detail,
             duration_ms: step_started.elapsed().as_millis() as u64,
+            started_ms: step_started_ms,
         });
         if !poll_hook(opts, &results) {
             break;
@@ -257,6 +261,8 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         duration_ms: ctx.elapsed_ms(),
         steps: results,
         failure,
+        trace: std::mem::take(&mut ctx.trace),
+        trace_truncated: ctx.trace_truncated,
         terminal: TerminalInfo {
             width: file.terminal.width,
             height: file.terminal.height,
@@ -285,12 +291,22 @@ fn describe(step: &Step) -> String {
 
 /// Feed one PTY chunk into the grid; return the fresh screen text.
 ///
-/// Records the screen as the `screen_changed` baseline for the next pump.
+/// Records the screen as the `screen_changed` baseline for the next pump,
+/// and captures raw bytes (capped) for trace replay.
 fn pump(session: &mut Session<'_>) -> String {
     let chunk = session.pty.poll(Duration::from_millis(100));
     session.emu.feed(&chunk);
     let text = session.emu.text();
     session.ctx.prev_screen = text.clone();
+    if !chunk.is_empty() && session.ctx.trace_bytes < crate::constants::TRACE_MAX_BYTES {
+        session.ctx.trace_bytes += chunk.len();
+        session.ctx.trace.push(crate::result::TraceChunk {
+            at_ms: session.ctx.elapsed_ms(),
+            bytes: chunk,
+        });
+    } else if !chunk.is_empty() {
+        session.ctx.trace_truncated = true;
+    }
     text
 }
 

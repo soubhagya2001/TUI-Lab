@@ -35,6 +35,12 @@ tuilab report --format html --out index.html
 # Debug a failed run (full failure bundle: screens, history, diffs)
 tuilab run tests/search.yaml --debug
 
+# Trace viewer: failures retain reports/traces/<suite>.zip (timeline +
+# raw bytes); render it or replay the session. --trace always|never
+# overrides the retain-on-failure default.
+tuilab trace reports/traces/search-flow.zip
+tuilab trace reports/traces/search-flow.zip --replay
+
 # Step through a run interactively (Enter continues, q aborts; forces sequential)
 tuilab run tests/search.yaml --step
 
