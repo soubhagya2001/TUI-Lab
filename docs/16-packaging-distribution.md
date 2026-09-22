@@ -83,9 +83,9 @@ as the engine re-execs forever (proven by `test_launcher.py`). Hence:
     `publish.yml`, environment `pypi`); npm trusted publisher for the
     `@tui-lab` scope; `CARGO_REGISTRY_TOKEN` secret; GitHub Pages source =
     GitHub Actions (for the web guide).
-2.  Bump all four versions (`tuilab/Cargo.toml` workspace, `pyproject.toml`,
-    `sdks/javascript/package.json`, `sdks/npm-cli/package.json` +
-    platform stubs) to `X.Y.Z` — `publish.yml` enforces equality with the tag.
+2.  Bump all seven versions with `python tuilab/pack/bump_versions.py X.Y.Z`
+    (workspace `Cargo.toml`, `pyproject.toml`, JS SDK, npm-cli wrapper + 3
+    platform stubs) — `publish.yml` enforces equality with the tag.
 3.  Green `main` → `git tag vX.Y.Z` → `git push origin vX.Y.Z`.
 4.  `release.yml` builds archives + GitHub Release; its `published` event
     fires `publish.yml` (wheels → PyPI, tarballs → npm, crates → crates.io).
@@ -95,8 +95,10 @@ as the engine re-execs forever (proven by `test_launcher.py`). Hence:
 ## 16.5 Files
 
 *   `tuilab/sdks/python/src/tuilab/_cli.py` — console-script launchers.
-*   `tuilab/sdks/python/pack/pack_wheel.py` — stage → build → retag → clean.
+*   `tuilab/sdks/python/pack/pack_wheel.py` — stage (chmod +x) → build →
+    exact-version select → retag → clean.
 *   `tuilab/sdks/python/tests/test_launcher.py` — anti-loop regression tests.
 *   `tuilab/sdks/npm-cli/{package.json,bin/,lib/,platforms/,pack/}` —
-    wrapper, launchers, resolver, stubs, pack script.
+    wrapper, launchers, explicit-map resolver, stubs, pack script.
+*   `tuilab/pack/bump_versions.py` — one-command lockstep version bumps.
 *   `.github/workflows/publish.yml` — tag → registries pipeline.

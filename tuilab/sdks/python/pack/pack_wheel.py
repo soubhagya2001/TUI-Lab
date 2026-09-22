@@ -15,6 +15,8 @@ Requires (pack-time only): `build`, `wheel`.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +25,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 BIN_STAGING = HERE / "src" / "tuilab" / "_bin"
 BINARIES = ("tuilab", "tuilab-mcp")
+
+
+def project_version() -> str:
+    """Single source of truth: `pyproject.toml` (lockstep with the tag)."""
+    text = (HERE / "pyproject.toml").read_text()
+    match = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
+    if not match:
+        raise SystemExit("no version in pyproject.toml")
+    return match.group(1)
 
 
 def stage(binary_dir: Path) -> list[Path]:
@@ -36,6 +47,9 @@ def stage(binary_dir: Path) -> list[Path]:
             raise SystemExit(f"binary not found for {kind} in {binary_dir}")
         dest = BIN_STAGING / src.name
         shutil.copy2(src, dest)
+        # K5: the exec bit dies on Windows checkouts — wheels must stay
+        # executable on Unix targets regardless of the staging host.
+        os.chmod(dest, 0o755)
         staged.append(dest)
     return staged
 
@@ -55,8 +69,16 @@ def main() -> int:
             cwd=HERE,
             check=True,
         )
-        wheels = sorted(Path(args.outdir).glob("tui_lab-*.whl"))
-        wheel = wheels[-1]
+        # K5: select by exact version, never lexicographic-last — a stale
+        # wheel from another platform must fail loudly, not ship silently.
+        want = f"tui_lab-{project_version()}-py3-none-any.whl"
+        matches = [p for p in Path(args.outdir).glob("tui_lab-*.whl") if p.name == want]
+        if len(matches) != 1:
+            raise SystemExit(
+                f"expected exactly one {want} in {args.outdir}, found: "
+                f"{[p.name for p in Path(args.outdir).glob('tui_lab-*.whl')]}"
+            )
+        wheel = matches[0]
         subprocess.run(
             [
                 sys.executable, "-m", "wheel", "tags",

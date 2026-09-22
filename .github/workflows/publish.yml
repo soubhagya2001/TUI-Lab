@@ -36,6 +36,9 @@ jobs:
           test "$(grep '^version = ' tuilab/sdks/python/pyproject.toml | cut -d'\"' -f2)" = "$TAG"
           test "$(node -p "require('./tuilab/sdks/javascript/package.json').version")" = "$TAG"
           test "$(node -p "require('./tuilab/sdks/npm-cli/package.json').version")" = "$TAG"
+          for plat in win32-x64 linux-x64 darwin-arm64; do
+            test "$(node -p "require('./tuilab/sdks/npm-cli/platforms/$plat/package.json').version")" = "$TAG"
+          done
           echo "all versions = $TAG"
 
   pypi:

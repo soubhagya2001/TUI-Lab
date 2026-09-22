@@ -9,8 +9,16 @@ const { existsSync } = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
+// K5: explicit platform map — anything else throws instead of silently
+// resolving to the wrong architecture (the old any-non-arm64→x64 rule).
+const PLATFORM_PACKAGES = {
+  "win32-x64": "@tui-lab/cli-win32-x64",
+  "linux-x64": "@tui-lab/cli-linux-x64",
+  "darwin-arm64": "@tui-lab/cli-darwin-arm64",
+};
+
 function platformKey() {
-  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const arch = process.arch === "arm64" ? "arm64" : process.arch;
   return `${process.platform}-${arch}`;
 }
 
@@ -24,7 +32,14 @@ function resolveBinary(kind) {
   const env = process.env[envName];
   if (env && existsSync(env)) return env;
   try {
-    const pkg = require.resolve(`@tui-lab/cli-${platformKey()}/package.json`, {
+    const pkgName = PLATFORM_PACKAGES[platformKey()];
+    if (!pkgName) {
+      throw new Error(
+        `unsupported platform ${platformKey()} (arch ${process.arch}): ` +
+          `supported: ${Object.keys(PLATFORM_PACKAGES).join(", ")}`
+      );
+    }
+    const pkg = require.resolve(`${pkgName}/package.json`, {
       paths: [__dirname, process.cwd()],
     });
     const candidate = path.join(path.dirname(pkg), file);
