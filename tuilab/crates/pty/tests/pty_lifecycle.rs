@@ -103,7 +103,10 @@ fn blocked_env_rejects_spawn() {
             env: vec![(blocked.to_string(), "evil".to_string())],
             ..SpawnOptions::default()
         };
-        let err = PtySession::spawn(&opts).expect_err("blocked env must fail");
+        let err = match PtySession::spawn(&opts) {
+            Ok(_) => panic!("blocked env must fail"),
+            Err(err) => err,
+        };
         assert!(
             err.to_string().contains("blocked env var"),
             "unexpected error: {err}"

@@ -179,9 +179,13 @@ mod tests {
         // Absolute inside-root resolves.
         assert!(jail_file(&root, &inside.to_string_lossy()).is_ok());
         // `..` escape rejected even when it resolves to a real file.
-        let outside = std::env::temp_dir().join(format!("tuilab-jail-out-{}.yaml", std::process::id()));
+        let outside =
+            std::env::temp_dir().join(format!("tuilab-jail-out-{}.yaml", std::process::id()));
         std::fs::write(&outside, "schema: tui-lab/v1").expect("outside file");
-        let dotdot = format!("../{}", outside.file_name().expect("name").to_string_lossy());
+        let dotdot = format!(
+            "../{}",
+            outside.file_name().expect("name").to_string_lossy()
+        );
         let err = jail_file(&root, &dotdot).expect_err("dotdot blocked");
         assert!(err.contains("escapes project root"), "{err}");
         // Absolute outside rejected too.

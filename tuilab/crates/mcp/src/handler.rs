@@ -280,7 +280,7 @@ impl TuiLabHandler {
     /// with tui_wait_for_text so the verdict reflects the latest state.
     #[tool(
         name = "tui_assert",
-        description = "Assert a condition (text_visible, text_not_visible, text_regex, cursor_position, screen_changed, exit_code, not_crashed) against the live screen."
+        description = "Assert a condition (text_visible, text_not_visible, text_regex, exact_text, cursor_position, screen_changed, exit_code, not_crashed, crashed) against the live screen."
     )]
     pub async fn tui_assert(
         &self,
@@ -433,18 +433,14 @@ impl TuiLabHandler {
 }
 
 /// Current view for assertions (exit state from a non-blocking poll).
-///
-/// v1 limitation: only clean exits read as code 0; nonzero exits surface as
-/// `crashed` (numeric codes arrive with richer process APIs later).
 fn live_view(
     session: &mut tui_lab_core::LiveSession,
     text: &str,
 ) -> tui_lab_assertions::ScreenView {
-    let (exit_code, crashed) = match session.pty.try_wait() {
-        Ok(Some(status)) if status.success() => (Some(0), false),
-        Ok(Some(_)) => (None, true),
-        _ => (None, false),
-    };
+    // C1: numeric codes survive (ExitCode(2) is assertable); only signal
+    // deaths count as crashed. try_wait errors mean "unknown", not crashed.
+    let status = session.pty.try_wait().ok().flatten();
+    let (exit_code, crashed) = tui_lab_pty::utils::exit_view(status.as_ref());
     tui_lab_assertions::ScreenView {
         text: text.to_string(),
         cursor: session.emu.cursor(),

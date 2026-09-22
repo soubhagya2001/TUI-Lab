@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use tui_lab_core::{run_file, RunOptions, StepHook};
+use tui_lab_core::{run_file, run_file_bounded, RunOptions, StepHook};
 use tui_lab_protocol::TestFile;
 
 /// Build the fixture binary on demand; return its path.
@@ -160,4 +160,148 @@ cleanup:
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     assert_eq!(result.steps.len(), 3);
     assert!(result.steps[2].kind.starts_with("cleanup:"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn assert_with_timeout_polls_then_fails() {
+    // C2: an assert with `timeout` keeps polling instead of failing on the
+    // first screen — the step takes ~the timeout, then reports the verdict.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: assert-timeout
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - assert_text:
+      contains: "no-such-screen"
+      timeout: 1s
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let started = std::time::Instant::now();
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed, "absent text must fail");
+    assert!(
+        started.elapsed() >= Duration::from_millis(900),
+        "assert must poll for ~the timeout, took {:?}",
+        started.elapsed()
+    );
+    let failure = result.failure.expect("failure recorded");
+    assert!(failure.step.contains("assert_text"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn assert_reaches_full_taxonomy() {
+    // C3: exact/cursor/exit/health/change checks are reachable from YAML.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: taxonomy
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: DOWN
+  - assert_text:
+      screen_changed: true
+      not_crashed: true
+  - press: ENTER
+  - assert_text:
+      contains: "beta-chair"
+  - press: q
+  - assert_text:
+      exit_code: 0
+      timeout: 5s
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(
+        result.passed,
+        "taxonomy suite must pass: {:?}",
+        result.failure
+    );
+    assert!(result.steps.iter().all(|step| step.passed));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn snapshot_uses_size_scoped_store() {
+    // C4: goldens live at <suite>/<name>/<WxH>.txt — sizes must not collide
+    // in a flat <name>.txt.
+    let dir = std::env::temp_dir().join(format!("tuilab-snap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: scoped
+application:
+  command: "{}"
+terminal:
+  width: 120
+  height: 40
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - snapshot:
+      name: boot
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let opts = RunOptions {
+        snapshot_dir: dir.clone(),
+        ..RunOptions::default()
+    };
+    let first = run_file(&file, &opts).await.expect("run completes");
+    assert!(!first.passed, "first run writes .new and fails");
+    let scoped_new = dir.join("scoped").join("boot").join("120x40.new");
+    assert!(scoped_new.is_file(), "size-scoped .new written");
+    assert!(
+        !dir.join("scoped").join("boot.txt").exists(),
+        "no flat legacy golden"
+    );
+    // Approve and re-run: now it compares and passes.
+    let golden = scoped_new.with_extension("txt");
+    std::fs::rename(&scoped_new, &golden).expect("approve golden");
+    let second = run_file(&file, &opts).await.expect("run completes");
+    assert!(second.passed, "approved golden must match");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn suite_terminal_timeout_bounds_run() {
+    // C5: `terminal.timeout` caps the whole suite via run_file_bounded.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: bounded
+application:
+  command: "{}"
+terminal:
+  width: 120
+  height: 40
+  timeout: 1s
+steps:
+  - wait_for_text:
+      text: "text-that-never-appears"
+      timeout: 5s
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let err = run_file_bounded(&file, &opts())
+        .await
+        .expect_err("suite bound must fire first");
+    assert!(
+        err.to_string().starts_with("timed out"),
+        "exit-4 mapping, got: {err}"
+    );
 }

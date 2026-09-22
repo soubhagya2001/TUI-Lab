@@ -1,7 +1,7 @@
 //! Parallel suite fan-out: one session per suite, ordered results (Phase 8).
 //!
-//! Each suite runs through the untouched single-session [`run_file`], so no
-//! shared mutable state exists between tasks. A semaphore bounds concurrent
+//! Each suite runs through the single-session [`run_file_bounded`] (suite
+//! `terminal.timeout` enforced per task), so no shared mutable state exists between tasks. A semaphore bounds concurrent
 //! PTYs at `min(max_parallel, registry cap)`; results reassemble in input
 //! order regardless of completion order (diffable reports). A failing suite
 //! never aborts its siblings — failures are data, matching the sequential
@@ -13,29 +13,29 @@ use tokio::sync::Semaphore;
 use tui_lab_protocol::TestFile;
 
 use crate::result::{FailureInfo, SuiteResult, TerminalInfo};
-use crate::runner::{run_file, RunOptions};
+use crate::runner::{run_file_bounded, RunOptions};
 use crate::sessions::DEFAULT_MAX_SESSIONS;
 
 /// Run parsed suites concurrently; returned in input order.
 ///
-/// `max_parallel` clamps to `[1, registry cap]`. Infrastructure errors become
+/// `max_parallel` clamps to `[1, registry cap]`. Each suite carries its own
+/// options (C5: wired timeouts survive fan-out). Infrastructure errors become
 /// failed results (named suite, error in `failure`) instead of aborting.
 pub async fn run_suites(
-    files: Vec<TestFile>,
-    opts: &RunOptions,
+    files: Vec<(TestFile, RunOptions)>,
     max_parallel: usize,
 ) -> Vec<SuiteResult> {
     let slots = max_parallel.clamp(1, DEFAULT_MAX_SESSIONS);
     let semaphore = Arc::new(Semaphore::new(slots));
     let mut set = tokio::task::JoinSet::new();
 
-    for (index, file) in files.into_iter().enumerate() {
+    for (index, (file, opts)) in files.into_iter().enumerate() {
         let permit_source = Arc::clone(&semaphore);
-        let opts = opts.clone();
         set.spawn(async move {
             let _permit = permit_source.acquire_owned().await.expect("semaphore open");
             let name = file.name.clone();
-            let outcome = run_file(&file, &opts).await;
+            // C5: per-suite timeout bounds apply in parallel too.
+            let outcome = run_file_bounded(&file, &opts).await;
             (index, name, outcome)
         });
     }

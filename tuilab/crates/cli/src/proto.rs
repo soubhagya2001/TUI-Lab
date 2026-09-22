@@ -198,11 +198,9 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 Err(e) => return error_response(&e),
             };
             let text = SessionRegistry::pump_once(session, Duration::from_millis(100));
-            let (exit_code, crashed) = match session.pty.try_wait() {
-                Ok(Some(status)) if status.success() => (Some(0), false),
-                Ok(Some(_)) => (None, true),
-                _ => (None, false),
-            };
+            // C1: same numeric-code mapping as the MCP live view.
+            let status = session.pty.try_wait().ok().flatten();
+            let (exit_code, crashed) = tui_lab_pty::utils::exit_view(status.as_ref());
             let view = tui_lab_assertions::ScreenView {
                 text,
                 cursor: session.emu.cursor(),

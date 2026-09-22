@@ -15,5 +15,5 @@ pub mod utils;
 pub use context::TestContext;
 pub use parallel::run_suites;
 pub use result::{FailureInfo, StepResult, SuiteResult, TerminalInfo};
-pub use runner::{run_file, RunOptions, StepHook};
+pub use runner::{run_file, run_file_bounded, RunOptions, StepHook};
 pub use sessions::{ClosedSession, LiveSession, NewSession, SessionRegistry};

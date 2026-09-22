@@ -4,12 +4,12 @@
 //! Step failures become [`SuiteResult`] data (CLI exit 1); only
 //! infrastructure breakdowns become [`CoreError`] (CLI exits 2–4).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use tui_lab_assertions::{evaluate, Condition, ScreenView};
 use tui_lab_input::{encode_key, encode_text};
-use tui_lab_protocol::{Step, SuiteAssertion, TestFile};
+use tui_lab_protocol::{Step, SuiteAssertion, TestFile, TextAssertion};
 use tui_lab_pty::{PtySession, SpawnOptions};
 use tui_lab_runtime::wait_for_text;
 use tui_lab_snapshots::{compile_masks, load_text};
@@ -89,6 +89,24 @@ struct Session<'a> {
     pty: &'a mut PtySession,
     emu: &'a mut Emulator,
     opts: &'a RunOptions,
+}
+
+/// Execute a parsed suite file end to end.
+///
+/// C5: enforces the suite `terminal.timeout` bound via
+/// [`tui_lab_runtime::run_with_timeout`] — its first caller. Without a
+/// bound this is exactly [`run_file`].
+pub async fn run_file_bounded(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult> {
+    match file.terminal.timeout {
+        Some(limit) => {
+            let what = format!("suite {:?}", file.name);
+            match tui_lab_runtime::run_with_timeout(run_file(file, opts), limit, &what).await {
+                Ok(inner) => inner,
+                Err(e) => Err(CoreError::Timeout(e.to_string())),
+            }
+        }
+        None => run_file(file, opts).await,
+    }
 }
 
 /// Execute a parsed suite file end to end.
@@ -264,10 +282,107 @@ fn describe(step: &Step) -> String {
 }
 
 /// Feed one PTY chunk into the grid; return the fresh screen text.
+///
+/// Records the screen as the `screen_changed` baseline for the next pump.
 fn pump(session: &mut Session<'_>) -> String {
     let chunk = session.pty.poll(Duration::from_millis(100));
     session.emu.feed(&chunk);
-    session.emu.text()
+    let text = session.emu.text();
+    session.ctx.prev_screen = text.clone();
+    text
+}
+
+/// Evaluate every check in one assertion against one screen (C3: the full
+/// taxonomy — exact text, cursor, exit code, crash state, screen change —
+/// is reachable from YAML, not just contains/not_contains/regex).
+fn evaluate_assertion(
+    assertion: &TextAssertion,
+    screen: &str,
+    cursor: (usize, usize),
+    changed: bool,
+    exit: (Option<i32>, bool),
+) -> StepOutcome {
+    let mut conditions = Vec::new();
+    if let Some(needle) = &assertion.contains {
+        conditions.push(Condition::TextVisible(needle.clone()));
+    }
+    if let Some(needle) = &assertion.not_contains {
+        conditions.push(Condition::TextNotVisible(needle.clone()));
+    }
+    if let Some(pattern) = &assertion.regex {
+        conditions.push(Condition::TextRegex(pattern.clone()));
+    }
+    if let Some(exact) = &assertion.exact_text {
+        conditions.push(Condition::ExactText(exact.clone()));
+    }
+    if let Some(cursor_pos) = &assertion.cursor {
+        conditions.push(Condition::CursorPosition {
+            row: cursor_pos.row,
+            col: cursor_pos.col,
+        });
+    }
+    if let Some(code) = assertion.exit_code {
+        conditions.push(Condition::ExitCode(code));
+    }
+    if let Some(expected) = assertion.screen_changed {
+        conditions.push(Condition::ScreenChanged(expected));
+    }
+    if let Some(healthy) = assertion.not_crashed {
+        conditions.push(if healthy {
+            Condition::NotCrashed
+        } else {
+            Condition::Crashed
+        });
+    }
+    let view = ScreenView {
+        text: screen.to_string(),
+        cursor,
+        screen_changed: changed,
+        exit_code: exit.0,
+        crashed: exit.1,
+    };
+    let mut failures = Vec::new();
+    for condition in &conditions {
+        let verdict = evaluate(condition, &view);
+        if !verdict.passed {
+            failures.push(verdict.detail);
+        }
+    }
+    StepOutcome {
+        passed: failures.is_empty(),
+        detail: if failures.is_empty() {
+            "assertions held".to_string()
+        } else {
+            failures.join("; ")
+        },
+    }
+}
+
+/// C2: poll an assertion until it holds or `timeout` elapses. With no
+/// timeout the step keeps the old single-attempt behavior.
+async fn assert_poll(session: &mut Session<'_>, assertion: &TextAssertion) -> Result<StepOutcome> {
+    let poll = session.opts.poll;
+    let start = Instant::now();
+    // Baseline for `screen_changed`: the screen as last observed before
+    // this step's first pump.
+    let baseline = session.ctx.prev_screen.clone();
+    loop {
+        let screen = pump(session);
+        let changed = screen != baseline;
+        let status = session
+            .pty
+            .try_wait()
+            .map_err(|e| CoreError::Pty(e.to_string()))?;
+        let exit = tui_lab_pty::utils::exit_view(status.as_ref());
+        let outcome = evaluate_assertion(assertion, &screen, session.emu.cursor(), changed, exit);
+        if outcome.passed {
+            return Ok(outcome);
+        }
+        match assertion.timeout {
+            Some(limit) if start.elapsed() < limit => tokio::time::sleep(poll).await,
+            _ => return Ok(outcome),
+        }
+    }
 }
 
 async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome> {
@@ -342,35 +457,7 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
             }
         }
         Step::AssertText(assertion) | Step::Expect(assertion) => {
-            let screen = pump(session);
-            let view = ScreenView::live(&screen, session.emu.cursor(), true);
-            let mut failures = Vec::new();
-            if let Some(needle) = &assertion.contains {
-                let verdict = evaluate(&Condition::TextVisible(needle.clone()), &view);
-                if !verdict.passed {
-                    failures.push(verdict.detail);
-                }
-            }
-            if let Some(needle) = &assertion.not_contains {
-                let verdict = evaluate(&Condition::TextNotVisible(needle.clone()), &view);
-                if !verdict.passed {
-                    failures.push(verdict.detail);
-                }
-            }
-            if let Some(pattern) = &assertion.regex {
-                let verdict = evaluate(&Condition::TextRegex(pattern.clone()), &view);
-                if !verdict.passed {
-                    failures.push(verdict.detail);
-                }
-            }
-            StepOutcome {
-                passed: failures.is_empty(),
-                detail: if failures.is_empty() {
-                    "assertions held".to_string()
-                } else {
-                    failures.join("; ")
-                },
-            }
+            assert_poll(session, assertion).await?
         }
         Step::AssertRegion(region) => {
             let screen = pump(session);
@@ -429,6 +516,10 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
 
 /// Capture the screen and compare against the golden (first run writes `.new`
 /// and fails so goldens are always approved explicitly).
+///
+/// C4: goldens live at the size-scoped store path
+/// (`<suite>/<name>/<WxH>.txt`), never the flat `<name>.txt` — different
+/// terminal sizes must not collide.
 fn snapshot_step(
     session: &mut Session<'_>,
     name: String,
@@ -437,9 +528,10 @@ fn snapshot_step(
     let screen = pump(session);
     let masks = compile_masks(&mask).map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
     let dir = session.opts.snapshot_dir.join(&session.ctx.suite);
-    let golden = dir.join(format!("{name}.txt"));
-    if !Path::new(&golden).exists() {
-        let new_path = dir.join(format!("{name}.new"));
+    let (width, height) = session.emu.dims();
+    let golden = tui_lab_snapshots::text_golden_path(&dir, &name, width as u16, height as u16);
+    if !golden.exists() {
+        let new_path = golden.with_extension("new");
         if let Some(parent) = new_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| CoreError::Message(e.to_string()))?;
         }

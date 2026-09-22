@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use tui_lab_core::{run_file, RunOptions, SuiteResult};
+use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult};
 use tui_lab_protocol::TestFile;
 use tui_lab_reporter::{load_json_all, write_json_all};
 
@@ -150,7 +150,7 @@ pub async fn run(
                 Ok(loaded) => loaded,
                 Err(code) => return code,
             };
-            match run_file(&file, &opts).await {
+            match run_file_bounded(&file, &opts).await {
                 Ok(result) => {
                     print_summary(&result);
                     if debug {
@@ -178,20 +178,16 @@ pub async fn run(
     } else {
         // Parallel: parse everything first so a schema error still exits 2
         // before anything launches; then fan out with run-all semantics
-        // (infra errors arrive as failed results, never aborts).
+        // (infra errors arrive as failed results, never aborts). Each suite
+        // keeps its wired options (C5: timeouts survive fan-out).
         let mut files = Vec::with_capacity(suites.len());
         for suite_path in &suites {
             match load_suite(suite_path, &config, terminal_override, step_mode) {
-                Ok((file, _)) => files.push(file),
+                Ok(loaded) => files.push(loaded),
                 Err(code) => return code,
             }
         }
-        let opts = RunOptions {
-            snapshot_dir: PathBuf::from(&config.snapshots_dir),
-            step_hook: step_mode.then(step_pause_hook),
-            ..RunOptions::default()
-        };
-        for result in tui_lab_core::run_suites(files, &opts, slots).await {
+        for result in tui_lab_core::run_suites(files, slots).await {
             print_summary(&result);
             if debug {
                 print_debug(&result);
@@ -233,8 +229,26 @@ fn load_suite(
         file.terminal.width = width;
         file.terminal.height = height;
     }
+    // C5: wire the parsed-but-ignored settings. Config terminal geometry
+    // applies only when the suite (and CLI flags) left the default 120x40;
+    // config env fills gaps the suite did not set; config default_timeout
+    // becomes the wait default (malformed values are config errors).
+    if file.terminal == tui_lab_protocol::TerminalConfig::default() {
+        file.terminal.width = config.default_terminal.width;
+        file.terminal.height = config.default_terminal.height;
+    }
+    for (key, value) in &config.env {
+        file.environment
+            .entry(key.clone())
+            .or_insert_with(|| value.clone());
+    }
+    let wait_default = tui_lab_protocol::parse_duration(&config.default_timeout).map_err(|e| {
+        eprintln!("bad default_timeout {:?}: {e}", config.default_timeout);
+        EXIT_CONFIG_ERROR
+    })?;
     let opts = RunOptions {
         snapshot_dir: PathBuf::from(&config.snapshots_dir),
+        wait_default,
         step_hook: step_mode.then(step_pause_hook),
         ..RunOptions::default()
     };

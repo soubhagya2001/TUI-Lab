@@ -63,7 +63,11 @@ async fn parallel_suites_overlap_and_stay_ordered() {
     };
 
     let started = Instant::now();
-    let results = run_suites(files, &opts, 3).await;
+    let results = run_suites(
+        files.into_iter().map(|file| (file, opts.clone())).collect(),
+        3,
+    )
+    .await;
     let wall_ms = started.elapsed().as_millis() as u64;
 
     // All green.
@@ -95,13 +99,26 @@ async fn one_failure_does_not_abort_siblings() {
                     contains: Some("no-such-screen".to_string()),
                     not_contains: None,
                     regex: None,
+                    exact_text: None,
+                    cursor: None,
+                    exit_code: None,
+                    not_crashed: None,
+                    screen_changed: None,
+                    timeout: None,
                 },
             ));
             bad
         },
         quick_suite(&bin, "green-c"),
     ];
-    let results = run_suites(files, &RunOptions::default(), 3).await;
+    let results = run_suites(
+        files
+            .into_iter()
+            .map(|file| (file, RunOptions::default()))
+            .collect(),
+        3,
+    )
+    .await;
     assert_eq!(results.len(), 3);
     assert!(results[0].passed);
     assert!(!results[1].passed);

@@ -58,6 +58,8 @@ pub enum Condition {
     ExitCode(i32),
     /// Process did not crash.
     NotCrashed,
+    /// Process died by signal / crash (C3: pairs with `not_crashed: false`).
+    Crashed,
 }
 
 /// Pass/fail plus a human line for reports and failure bundles.
@@ -123,6 +125,7 @@ pub fn condition_from_json(value: &serde_json::Value) -> Result<Condition, Strin
             Ok(Condition::ExitCode(code))
         }
         "not_crashed" => Ok(Condition::NotCrashed),
+        "crashed" => Ok(Condition::Crashed),
         other => Err(format!("unknown assertion type: {other}")),
     }
 }
@@ -195,5 +198,40 @@ pub fn evaluate(condition: &Condition, view: &ScreenView) -> Verdict {
                 pass("process healthy".to_string())
             }
         }
+        Condition::Crashed => {
+            if view.crashed {
+                pass("process crashed as expected".to_string())
+            } else {
+                fail("process healthy, expected a crash".to_string())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn healthy() -> ScreenView {
+        ScreenView::live("Main Menu", (3, 10), true)
+    }
+
+    #[test]
+    fn crashed_pair_covers_both_outcomes() {
+        assert!(evaluate(&Condition::NotCrashed, &healthy()).passed);
+        assert!(!evaluate(&Condition::Crashed, &healthy()).passed);
+        let mut crashed = healthy();
+        crashed.crashed = true;
+        assert!(!evaluate(&Condition::NotCrashed, &crashed).passed);
+        assert!(evaluate(&Condition::Crashed, &crashed).passed);
+    }
+
+    #[test]
+    fn exit_code_needs_a_reaped_code() {
+        assert!(!evaluate(&Condition::ExitCode(0), &healthy()).passed);
+        let mut exited = healthy();
+        exited.exit_code = Some(2);
+        assert!(evaluate(&Condition::ExitCode(2), &exited).passed);
+        assert!(!evaluate(&Condition::ExitCode(0), &exited).passed);
     }
 }

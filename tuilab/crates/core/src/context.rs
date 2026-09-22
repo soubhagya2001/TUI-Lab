@@ -17,6 +17,8 @@ pub struct TestContext {
     pub step_index: usize,
     /// Human-readable input history (`press ENTER`, `type[len=5]`, …).
     pub input_history: Vec<String>,
+    /// Screen from the previous pump (C3: `screen_changed` baseline).
+    pub prev_screen: String,
 }
 
 impl TestContext {
@@ -28,6 +30,7 @@ impl TestContext {
             started_at: Instant::now(),
             step_index: 0,
             input_history: Vec::new(),
+            prev_screen: String::new(),
         }
     }
 

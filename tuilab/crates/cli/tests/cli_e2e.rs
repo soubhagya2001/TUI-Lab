@@ -250,3 +250,51 @@ fn run_step_mode_advances_on_piped_enters() {
     assert!(stdout.contains("to continue"), "step prompts shown");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn config_default_timeout_wires_into_waits() {
+    // C5: `default_timeout` from tuilab.yaml becomes the wait default — a
+    // stepless wait on absent text fails in ~100ms, not the 10s fallback.
+    use std::time::{Duration, Instant};
+
+    let dir = scratch("wired-timeout");
+    std::fs::write(dir.join("tuilab.yaml"), "default_timeout: 100ms\n").expect("config");
+    let suite = write(
+        &dir,
+        "waiting.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: waiting\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"text-that-never-appears\"\n  - press: q\ncleanup:\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let started = Instant::now();
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1), "wait failure exits 1");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "wired 100ms timeout must fail fast, took {:?}",
+        started.elapsed()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn bad_default_timeout_is_config_error() {
+    // C5: a malformed default_timeout is exit 2, never a silent default.
+    let dir = scratch("bad-timeout");
+    std::fs::write(dir.join("tuilab.yaml"), "default_timeout: forever\n").expect("config");
+    let suite = write(&dir, "green.yaml", &green_suite(&fixture_bin()));
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(2), "bad timeout exits 2");
+    let _ = std::fs::remove_dir_all(&dir);
+}

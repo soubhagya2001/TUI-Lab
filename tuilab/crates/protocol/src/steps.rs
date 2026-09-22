@@ -166,6 +166,9 @@ pub struct ResizeTo {
 }
 
 /// `assert_text` / `expect` payload.
+///
+/// C2/C3: every check polls until `timeout` (default: one attempt), and the
+/// full taxonomy is reachable — not just contains/not_contains/regex.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TextAssertion {
@@ -175,6 +178,29 @@ pub struct TextAssertion {
     pub not_contains: Option<String>,
     /// Regex that must match.
     pub regex: Option<String>,
+    /// Whole screen (trimmed) must equal this text.
+    pub exact_text: Option<String>,
+    /// Cursor must sit at zero-based (row, col).
+    pub cursor: Option<CursorPosition>,
+    /// Process must have exited with this code.
+    pub exit_code: Option<i32>,
+    /// Process health: `Some(true)` requires healthy, `Some(false)` requires crashed.
+    pub not_crashed: Option<bool>,
+    /// Screen must (not) have changed since the previous pump.
+    pub screen_changed: Option<bool>,
+    /// Poll until all checks hold (or fail fast on first attempt when absent).
+    #[serde(default, with = "humantime_opt")]
+    pub timeout: Option<Duration>,
+}
+
+/// Zero-based cursor position for assertions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CursorPosition {
+    /// Row.
+    pub row: usize,
+    /// Column.
+    pub col: usize,
 }
 
 /// `assert_region` payload.
@@ -277,8 +303,12 @@ impl Serialize for SuiteAssertion {
     }
 }
 
-/// Parse `500ms` / `3s` / `2m`.
-fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
+/// Parse `500ms` / `3s` / `2m` (bare numbers mean milliseconds).
+///
+/// Shared with the CLI so `tuilab.yaml` timeouts parse exactly like suite
+/// timeouts (C5). Unit quirks (`"m"` overflow, bare-number default) are
+/// tracked as R4, not changed here.
+pub fn parse_duration(raw: &str) -> std::result::Result<Duration, String> {
     let (number, unit) = raw
         .find(|c: char| c.is_alphabetic())
         .map_or((raw, ""), |idx| raw.split_at(idx));

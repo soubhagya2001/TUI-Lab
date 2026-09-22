@@ -180,6 +180,10 @@ mod tests {
         let text = serde_yaml::to_string(&ProjectConfig::default()).expect("serialize");
         let parsed: ProjectConfig = serde_yaml::from_str(&text).expect("parse");
         assert_eq!(parsed.security, SecurityPolicy::default());
-        assert!(parsed.security.allow_commands.iter().all(|entry| entry != "./*"));
+        assert!(parsed
+            .security
+            .allow_commands
+            .iter()
+            .all(|entry| entry != "./*"));
     }
 }

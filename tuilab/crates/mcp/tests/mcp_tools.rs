@@ -332,10 +332,8 @@ async fn concurrent_waits_do_not_serialize() {
 async fn run_test_rejects_path_traversal() {
     // S3: absolute paths outside the root and `..` escapes never read.
     let (handler, root) = open_handler("traversal");
-    let outside = std::env::temp_dir().join(format!(
-        "tuilab-traversal-{}.yaml",
-        std::process::id()
-    ));
+    let outside =
+        std::env::temp_dir().join(format!("tuilab-traversal-{}.yaml", std::process::id()));
     std::fs::write(&outside, "schema: tui-lab/v1").expect("outside suite");
     let err = match handler
         .tui_run_test(Parameters(RunTestParams {
@@ -364,10 +362,7 @@ async fn run_test_rejects_path_traversal() {
     );
     // `..` to a REAL file outside still hits the jail check, not just
     // missing-file handling.
-    let dotdot = format!(
-        "../tuilab-traversal-{}.yaml",
-        std::process::id()
-    );
+    let dotdot = format!("../tuilab-traversal-{}.yaml", std::process::id());
     let err = match handler
         .tui_run_test(Parameters(RunTestParams {
             test_file: dotdot,
@@ -381,6 +376,66 @@ async fn run_test_rejects_path_traversal() {
     assert!(err.contains("escapes project root"), "{err}");
     let _ = std::fs::remove_file(&outside);
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn nonzero_exit_code_asserts() {
+    // C1: ExitCode(2) must pass with the numeric code — nonzero exits are
+    // codes, not crashes. Under the old mapping this looped forever on
+    // "process still running".
+    use std::time::{Duration, Instant};
+
+    let (handler, _root) = open_handler("exit-code");
+    #[cfg(windows)]
+    let (command, args) = (
+        "cmd".to_string(),
+        vec!["/C".to_string(), "exit 2".to_string()],
+    );
+    #[cfg(not(windows))]
+    let (command, args) = (
+        "sh".to_string(),
+        vec!["-c".to_string(), "exit 2".to_string()],
+    );
+    let id = handler
+        .tui_launch(Parameters(LaunchParams {
+            command,
+            args,
+            cwd: None,
+            width: 80,
+            height: 24,
+            env: Default::default(),
+        }))
+        .await
+        .expect("launch")
+        .0
+        .session_id;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let out = handler
+            .tui_assert(Parameters(AssertParams {
+                session_id: id.clone(),
+                assertion: serde_json::json!({"type": "exit_code", "code": 2}),
+            }))
+            .await
+            .expect("assert")
+            .0;
+        if out.passed {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "exit code 2 never observed: {}",
+            out.detail
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    handler
+        .tui_close(Parameters(CloseParams {
+            session_id: id,
+            quit: None,
+        }))
+        .await
+        .expect("close");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
