@@ -175,7 +175,11 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             })
             .to_string()
         }
-        Action::Screen { session_id, styled } => {
+        Action::Screen {
+            session_id,
+            styled,
+            tree,
+        } => {
             let session = match registry.get_mut(&session_id) {
                 Ok(session) => session,
                 Err(e) => return error_response(&e.to_string()),
@@ -211,6 +215,22 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 "cursor": {"row": row, "col": col},
                 "text": text,
                 "cells": cells,
+                "tree": tree.then(|| {
+                    session
+                        .emu
+                        .a11y_tree()
+                        .into_iter()
+                        .map(|node| {
+                            serde_json::json!({
+                                "role": node.role.name(),
+                                "name": node.name,
+                                "x": node.x,
+                                "y": node.y,
+                                "focused": node.focused,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                }),
             })
             .to_string()
         }
@@ -236,6 +256,7 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 screen_changed: true,
                 exit_code,
                 crashed,
+                tree: session.emu.a11y_tree(),
             };
             let verdict = evaluate(&condition, &view);
             serde_json::json!({

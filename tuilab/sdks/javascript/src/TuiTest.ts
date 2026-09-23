@@ -93,13 +93,14 @@ export class TuiTest {
     );
   }
 
-  /** Current screen grid (text, cursor, dimensions; cells when styled). */
-  async screen(styled = false): Promise<JsonDict> {
+  /** Current screen grid (text, cursor, dimensions; cells/tree when asked). */
+  async screen(styled = false, tree = false): Promise<JsonDict> {
     const action: JsonDict = {
       action: "screen",
       session_id: this.sessionId,
     };
     if (styled) action["styled"] = true;
+    if (tree) action["tree"] = true;
     return check(await this.conn.request(action), "screen");
   }
 

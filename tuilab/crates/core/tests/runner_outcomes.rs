@@ -486,3 +486,65 @@ async fn startup_budget_fails_blank_boots() {
         started.elapsed()
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn role_assertion_finds_fixture_button() {
+    // E1: YAML `role`/`name` walks the heuristic a11y tree end to end.
+    // The fixture list footer renders `[q] quit` — a detectable button.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: role-pass
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - assert_text:
+      role: button
+      name: q
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(
+        result.passed,
+        "button role must be found: {:?}",
+        result.failure
+    );
+    assert!(result.steps.iter().all(|step| step.passed));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn role_assertion_fails_cleanly_when_absent() {
+    // E1: a missing widget is a test failure naming the role — not an
+    // infra abort, not a silent pass.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: role-fail
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - assert_text:
+      role: button
+      name: cancel
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed, "absent button must fail");
+    let failure = result.failure.expect("failure recorded");
+    assert!(failure.step.contains("assert_text"));
+    assert!(
+        failure.expected.contains("button") || failure.expected.contains("cancel"),
+        "failure names the missing widget: {}",
+        failure.expected
+    );
+}

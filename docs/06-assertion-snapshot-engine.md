@@ -9,6 +9,7 @@ Assertions run against **terminal state** (grid + cursor + process), not raw byt
   - contains / not_contains / regex / exact_text
 - Screen
   - snapshot (golden compare) / region / dimensions / cursor_position
+  - role (heuristic a11y widget: button / textinput / checkbox + name)
 - Process
   - exit_code / crashed / timeout / stderr contains (future — child `stderr` shares the PTY stream; `portable-pty` 0.9 exposes no stderr redirect, see `11`)
 - Interaction
@@ -53,6 +54,21 @@ Process:
 - assert_exit_code: 0
 - assert_process_not_crashed: true
 ```
+
+Role (P5-E1, heuristic — inferred from TUI conventions `[ Label ]`,
+`< Label >`, `[x]`, `Label: ___`; no app cooperation):
+
+```yaml
+- assert_text:
+    role: button      # button | textinput | checkbox
+    name: submit      # case-insensitive substring; omit to match any
+    timeout: 2s       # optional poll, same as other asserts
+```
+
+`tuilab proto` / MCP: `{ "type": "role", "role": "button", "name": "submit" }`.
+`tui_screen { tree: true }` dumps the same tree (`role/name/x/y/focused`)
+for agent targeting. Custom-drawn widgets that ignore these conventions are
+invisible to the tree — a documented limitation, not an error.
 
 ## 6.2 Snapshots (two kinds)
 

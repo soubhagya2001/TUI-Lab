@@ -1,12 +1,12 @@
 //! Minimal deterministic TUI fixture for TUI Lab (Phase 1 + 9b).
 //!
 //! Screens (static strings, no clocks — snapshot-safe):
-//! * list:   title `TUI-LAB-SAMPLE`, footer hints
+//! * list:   title `TUI-LAB-SAMPLE`, footer hints + `[q] quit` button
 //! * search: `/` opens `Search: <query>`, live filter
 //! * detail: `ENTER` shows `Selected: <item>`
 //! Mouse capture is always on; the footer shows the last mouse event
 //! (`Mouse: -` initially). Quit with `q` (exit 0). `ESC` in search returns
-//! to the list.
+//! to the list. `[q]` is a role-detectable button for a11y assertions (E1).
 
 use std::io::{self, Stdout};
 use std::time::Duration;
@@ -222,8 +222,10 @@ fn ui(frame: &mut ratatui::Frame<'_>, app: &mut App) {
 
     let footer = match app.mode {
         Mode::Search => format!("Search: {}", app.query),
-        Mode::List => "j/k or arrows move, / search, ENTER select, q quit".to_string(),
-        Mode::Detail => "ESC back, q quit".to_string(),
+        Mode::List => {
+            "j/k or arrows move, / search, ENTER select, [q] quit".to_string()
+        }
+        Mode::Detail => "ESC back, [q] quit".to_string(),
     };
     let footer = format!("{footer} | {}", app.mouse);
     let help =

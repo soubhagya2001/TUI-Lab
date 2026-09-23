@@ -186,6 +186,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_screen(Parameters(ScreenParams {
             session_id: id.clone(),
             styled: true,
+            tree: false,
         }))
         .await
         .expect("styled screen")
@@ -203,6 +204,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_screen(Parameters(ScreenParams {
             session_id: id.clone(),
             styled: false,
+            tree: false,
         }))
         .await
         .expect("screen")
@@ -244,6 +246,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_screen(Parameters(ScreenParams {
             session_id: "sess_404".to_string(),
             styled: false,
+            tree: false,
         }))
         .await
         .is_err());
@@ -509,6 +512,7 @@ async fn idle_sessions_reaped_on_tool_entry() {
         .tui_screen(Parameters(ScreenParams {
             session_id: id.clone(),
             styled: false,
+            tree: false,
         }))
         .await
         .expect("fresh session serves");
@@ -518,6 +522,7 @@ async fn idle_sessions_reaped_on_tool_entry() {
         .tui_screen(Parameters(ScreenParams {
             session_id: id,
             styled: false,
+            tree: false,
         }))
         .await
     {
@@ -560,6 +565,7 @@ async fn resize_reports_actual_dims_and_validates() {
         .tui_screen(Parameters(ScreenParams {
             session_id: id.clone(),
             styled: false,
+            tree: false,
         }))
         .await
         .expect("screen")

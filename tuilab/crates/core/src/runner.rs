@@ -408,6 +408,7 @@ fn evaluate_assertion(
     changed: bool,
     exit: (Option<i32>, bool),
     compiled: Option<&regex::Regex>,
+    tree: Vec<tui_lab_terminal::A11yNode>,
 ) -> StepOutcome {
     let mut conditions = Vec::new();
     if let Some(needle) = &assertion.contains {
@@ -438,12 +439,19 @@ fn evaluate_assertion(
             Condition::Crashed
         });
     }
+    if let Some(role) = &assertion.role {
+        conditions.push(Condition::Role {
+            role: role.clone(),
+            name: assertion.name.clone().unwrap_or_default(),
+        });
+    }
     let view = ScreenView {
         text: screen.to_string(),
         cursor,
         screen_changed: changed,
         exit_code: exit.0,
         crashed: exit.1,
+        tree,
     };
     let mut failures = Vec::new();
     for condition in &conditions {
@@ -508,6 +516,7 @@ async fn assert_poll(session: &mut Session<'_>, assertion: &TextAssertion) -> Re
             changed,
             exit,
             compiled.as_ref(),
+            session.emu.a11y_tree(),
         );
         if outcome.passed {
             return Ok(outcome);

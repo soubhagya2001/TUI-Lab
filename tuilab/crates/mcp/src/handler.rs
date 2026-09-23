@@ -403,12 +403,27 @@ impl TuiLabHandler {
                 })
                 .collect()
         });
+        let tree = params.tree.then(|| {
+            session
+                .emu
+                .a11y_tree()
+                .into_iter()
+                .map(|node| crate::tools::TreeNode {
+                    role: node.role.name().to_string(),
+                    name: node.name,
+                    x: node.x,
+                    y: node.y,
+                    focused: node.focused,
+                })
+                .collect()
+        });
         Ok(Json(ScreenOut {
             width,
             height,
             cursor: CursorPos { row, col },
             text,
             cells,
+            tree,
         }))
     }
 
@@ -765,5 +780,6 @@ fn live_view(
         screen_changed: true,
         exit_code,
         crashed,
+        tree: session.emu.a11y_tree(),
     }
 }

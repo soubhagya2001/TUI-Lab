@@ -105,6 +105,8 @@ async fn one_failure_does_not_abort_siblings() {
                     not_crashed: None,
                     screen_changed: None,
                     timeout: None,
+                    role: None,
+                    name: None,
                 },
             ));
             bad

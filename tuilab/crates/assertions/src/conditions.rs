@@ -6,6 +6,7 @@
 //! for the Phase 3 reporter; enforcement arrives with budgets, not here.
 
 use crate::utils::contains;
+use tui_lab_terminal::{find_role, A11yNode, Role};
 
 /// What the engine knows at assertion time.
 pub struct ScreenView {
@@ -19,6 +20,8 @@ pub struct ScreenView {
     pub exit_code: Option<i32>,
     /// Whether the process died by signal / crash.
     pub crashed: bool,
+    /// Heuristic accessibility tree (possibly empty).
+    pub tree: Vec<A11yNode>,
 }
 
 impl ScreenView {
@@ -30,6 +33,7 @@ impl ScreenView {
             screen_changed,
             exit_code: None,
             crashed: false,
+            tree: Vec::new(),
         }
     }
 }
@@ -60,6 +64,13 @@ pub enum Condition {
     NotCrashed,
     /// Process died by signal / crash (C3: pairs with `not_crashed: false`).
     Crashed,
+    /// A widget with `role` and visible `name` exists (P5-E1, heuristic).
+    Role {
+        /// Canonical role name (`button`, `textinput`, `checkbox`).
+        role: String,
+        /// Name substring (case-insensitive).
+        name: String,
+    },
 }
 
 /// Pass/fail plus a human line for reports and failure bundles.
@@ -75,8 +86,9 @@ pub struct Verdict {
 /// Accepted shapes (`type` discriminates):
 /// `text_visible` / `text_not_visible` / `text_regex` / `exact_text` with
 /// `text`; `cursor_position` with `row`/`col`; `screen_changed` with optional
-/// `changed` (default true); `exit_code` with `code`; `not_crashed`.
-/// Shared by the MCP server and the `tuilab proto` sidecar mode.
+/// `changed` (default true); `exit_code` with `code`; `not_crashed`;
+/// `crashed`; `role` with `role` + `name`. Shared by the MCP server and the
+/// `tuilab proto` sidecar mode.
 pub fn condition_from_json(value: &serde_json::Value) -> Result<Condition, String> {
     let obj = value
         .as_object()
@@ -126,6 +138,16 @@ pub fn condition_from_json(value: &serde_json::Value) -> Result<Condition, Strin
         }
         "not_crashed" => Ok(Condition::NotCrashed),
         "crashed" => Ok(Condition::Crashed),
+        "role" => {
+            let role = text_field("role")?;
+            if Role::parse(&role).is_none() {
+                return Err(format!("role needs a known role, got {role:?}"));
+            }
+            Ok(Condition::Role {
+                role,
+                name: text_field("name")?,
+            })
+        }
         other => Err(format!("unknown assertion type: {other}")),
     }
 }
@@ -205,6 +227,21 @@ pub fn evaluate(condition: &Condition, view: &ScreenView) -> Verdict {
                 fail("process healthy, expected a crash".to_string())
             }
         }
+        Condition::Role { role, name } => {
+            let Some(role) = Role::parse(role) else {
+                return fail(format!("unknown role {role:?}"));
+            };
+            match find_role(&view.tree, role, name) {
+                Some(node) => pass(format!(
+                    "{} {:?} at ({},{})",
+                    node.role.name(),
+                    node.name,
+                    node.x,
+                    node.y
+                )),
+                None => fail(format!("no {role:?} named {name:?} on screen")),
+            }
+        }
     }
 }
 
@@ -233,5 +270,42 @@ mod tests {
         exited.exit_code = Some(2);
         assert!(evaluate(&Condition::ExitCode(2), &exited).passed);
         assert!(!evaluate(&Condition::ExitCode(0), &exited).passed);
+    }
+
+    #[test]
+    fn role_matches_tree_nodes() {
+        use tui_lab_terminal::build_tree;
+        let mut view = healthy();
+        view.tree = build_tree(&["[ Submit ]".to_string(), "plain".to_string()], (0, 0));
+        assert!(
+            evaluate(
+                &Condition::Role {
+                    role: "button".to_string(),
+                    name: "submit".to_string(),
+                },
+                &view
+            )
+            .passed
+        );
+        assert!(
+            !evaluate(
+                &Condition::Role {
+                    role: "button".to_string(),
+                    name: "cancel".to_string(),
+                },
+                &view
+            )
+            .passed
+        );
+        assert!(
+            !evaluate(
+                &Condition::Role {
+                    role: "textinput".to_string(),
+                    name: "submit".to_string(),
+                },
+                &view
+            )
+            .passed
+        );
     }
 }

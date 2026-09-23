@@ -227,6 +227,11 @@ pub struct TextAssertion {
     /// Poll until all checks hold (or fail fast on first attempt when absent).
     #[serde(default, with = "humantime_opt")]
     pub timeout: Option<Duration>,
+    /// A widget with this canonical role must exist (`button`,
+    /// `textinput`, `checkbox`).
+    pub role: Option<String>,
+    /// Name substring the role widget must show (case-insensitive).
+    pub name: Option<String>,
 }
 
 /// Zero-based cursor position for assertions.

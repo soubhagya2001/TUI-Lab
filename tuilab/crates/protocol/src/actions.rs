@@ -90,6 +90,9 @@ pub enum Action {
         /// Include per-cell style data.
         #[serde(default)]
         styled: bool,
+        /// Include the heuristic accessibility tree.
+        #[serde(default)]
+        tree: bool,
     },
     /// Evaluate one assertion condition (see `tui-lab-assertions`).
     Assert {
@@ -170,7 +173,7 @@ const ACTION_FIELDS: &[(&str, &[&str])] = &[
             "poll_ms",
         ],
     ),
-    ("screen", &["action", "session_id", "styled"]),
+    ("screen", &["action", "session_id", "styled", "tree"]),
     ("assert", &["action", "session_id", "condition"]),
     ("snapshot", &["action", "session_id", "name"]),
     ("resize", &["action", "session_id", "width", "height"]),

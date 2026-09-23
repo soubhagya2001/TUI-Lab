@@ -90,12 +90,14 @@ impl TuiTest {
         .await?;
         Ok(())
     }
-
-    /// Current screen grid (text, cursor, dimensions; cells when styled).
-    pub async fn screen(&mut self, styled: bool) -> Result<Value, TuiLabError> {
+    /// Current screen grid (text, cursor, dimensions; cells/tree when asked).
+    pub async fn screen(&mut self, styled: bool, tree: bool) -> Result<Value, TuiLabError> {
         let mut action = json!({"action": "screen", "session_id": self.session_id});
         if styled {
             action["styled"] = Value::Bool(true);
+        }
+        if tree {
+            action["tree"] = Value::Bool(true);
         }
         self.act(action, "screen").await
     }
@@ -129,7 +131,7 @@ impl TuiTest {
 
     /// Assert text is absent from the current screen.
     pub async fn expect_not_text(&mut self, text: &str) -> Result<(), TuiLabError> {
-        let screen = self.screen(false).await?;
+        let screen = self.screen(false, false).await?;
         let body = screen
             .get("text")
             .and_then(Value::as_str)

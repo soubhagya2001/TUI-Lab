@@ -280,6 +280,12 @@ impl Emulator {
         (point.line.0.max(0) as usize, point.column.0)
     }
 
+    /// Heuristic accessibility tree for agents and `role` assertions.
+    pub fn a11y_tree(&self) -> Vec<crate::a11y::A11yNode> {
+        let rows: Vec<String> = self.text().lines().map(str::to_string).collect();
+        crate::a11y::build_tree(&rows, self.cursor())
+    }
+
     /// Visible `(cols, rows)`.
     pub fn dims(&self) -> (usize, usize) {
         (self.term.columns(), self.term.screen_lines())

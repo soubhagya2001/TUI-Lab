@@ -167,9 +167,12 @@ async fn styled_screen_and_quit_close() {
     tui.expect_text("TUI-LAB-SAMPLE", 10_000, false, Some(25))
         .await
         .expect("boot");
-    let styled = tui.screen(true).await.expect("styled screen");
+    let styled = tui.screen(true, false).await.expect("styled screen");
     let cells = styled.get("cells").and_then(serde_json::Value::as_array);
     assert!(cells.is_some_and(|cells| !cells.is_empty()));
+    // E1: the tree dump is a JSON array (possibly empty on plain screens).
+    let tree = tui.screen(false, true).await.expect("tree screen");
+    assert!(tree.get("tree").and_then(|t| t.as_array()).is_some());
     let out = tui.close(Some("q"), None).await.expect("quit close");
     assert_eq!(out.get("ok"), Some(&serde_json::Value::Bool(true)));
 }

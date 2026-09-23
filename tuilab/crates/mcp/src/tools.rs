@@ -103,6 +103,9 @@ pub struct ScreenParams {
     /// Request styled cells (accepted; per-cell detail arrives in v2).
     #[serde(default)]
     pub styled: bool,
+    /// Request the heuristic accessibility tree (P5-E1).
+    #[serde(default)]
+    pub tree: bool,
 }
 
 /// Cursor position.
@@ -128,6 +131,24 @@ pub struct ScreenOut {
     /// Styled cells, only when `styled: true` was requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cells: Option<Vec<ScreenCell>>,
+    /// Accessibility tree, only when `tree: true` was requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree: Option<Vec<TreeNode>>,
+}
+
+/// One accessibility-tree widget (heuristic roles, see terminal `a11y`).
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct TreeNode {
+    /// Canonical role (`button`, `textinput`, `checkbox`).
+    pub role: String,
+    /// Visible label.
+    pub name: String,
+    /// Zero-based column.
+    pub x: usize,
+    /// Zero-based row.
+    pub y: usize,
+    /// Cursor inside the widget span.
+    pub focused: bool,
 }
 
 /// One styled cell in `tui_screen` output.

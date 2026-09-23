@@ -70,7 +70,7 @@ assertions:
 | `wait_for_text` | `{ text, timeout?, regex? }` | Polling wait — always prefer over `sleep` |
 | `sleep` | `"500ms"` | Escape hatch only (flaky, discouraged) |
 | `resize` | `{ width, height }` | e.g. 80x24, 120x40, 160x50, 40x15 |
-| `assert_text` / `expect` | `{ contains/not_contains/regex/exact_text/cursor/exit_code/not_crashed/screen_changed/timeout }` | Polls to `timeout`; see `06` |
+| `assert_text` / `expect` | `{ contains/not_contains/regex/exact_text/cursor/exit_code/not_crashed/screen_changed/role/name/timeout }` | Polls to `timeout`; `role`+`name` = heuristic a11y widget (see `06`) |
 | `assert_region` | `{ x,y,width,height, contains }` | Cell-scoped; OOB names the grid size |
 | `assert_exit_code` / `exit_code` | `0` | Post-cleanup |
 | `snapshot` / `screenshot` | `{ name, mask?, styled?, graphics? }` | Golden-file compare (text default; styled = colors; graphics = Sixel) |

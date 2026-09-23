@@ -91,11 +91,13 @@ class TuiTest:
             "type",
         )
 
-    async def screen(self, *, styled: bool = False) -> dict:
-        """Current screen grid (text, cursor, dimensions; cells when styled)."""
+    async def screen(self, *, styled: bool = False, tree: bool = False) -> dict:
+        """Current screen grid (text, cursor, dimensions; cells/tree when asked)."""
         action: dict = {"action": "screen", "session_id": self.session_id}
         if styled:
             action["styled"] = True
+        if tree:
+            action["tree"] = True
         return _check(await self._conn.request(action), "screen")
 
     async def expect_text(

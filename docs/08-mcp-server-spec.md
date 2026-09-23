@@ -18,7 +18,7 @@ to the transport. Scope is tools only — no prompts/resources.
 | `tui_launch` | `{ command, args?, cwd?, width?, height?, env? }` | `{ session_id, status, screen }` |
 | `tui_press` | `{ session_id, key }` | `{ ok, screen_changed }` |
 | `tui_type` | `{ session_id, text }` | `{ ok }` |
-| `tui_screen` | `{ session_id, style? }` | `{ width, height, cursor, text, cells? }` |
+| `tui_screen` | `{ session_id, style?, tree? }` | `{ width, height, cursor, text, cells?, tree? }` |
 | `tui_wait_for_text` | `{ session_id, text, timeout_ms?, regex? }` | `{ found, elapsed_ms, screen }` |
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
 | `tui_snapshot` | `{ session_id, name }` | `{ saved, diff? }` |
@@ -36,6 +36,10 @@ Phase 4 field notes (deviations from early sketches, kept honest):
 *   `tui_screen { styled: true }` returns the per-cell array (`x/y/char/
     fg/bg/bold/underline/reverse`, deterministic color encoding); text +
     cursor + dims always return.
+*   `tui_screen { tree: true }` returns the heuristic accessibility tree
+    (`[{ role, name, x, y, focused }]`, roles `button`/`textinput`/
+    `checkbox`) for agent targeting and `tui_assert { type: "role" }`
+    (P5-E1, see `06` §6.1).
 *   `tui_snapshot` returns `{ saved: true }` when it writes a new golden,
     `{ saved: false, diff }` when it compares.
 *   Allowlist patterns are regexes: `^\./.*`, `^cargo run.*`, `^python.*`

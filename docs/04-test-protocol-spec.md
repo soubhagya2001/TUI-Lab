@@ -54,7 +54,7 @@ Polls screen buffer until substring/regex appears. Prefer over `sleep`.
 ### screen
 
 ```json
-{ "action": "screen", "session_id": "sess_123" }
+{ "action": "screen", "session_id": "sess_123", "styled": false, "tree": false }
 ```
 
 Returns:
@@ -63,10 +63,13 @@ Returns:
 { "width": 120, "height": 40,
   "cursor": { "row": 2, "col": 5, "visible": true },
   "text": "Welcome...\n> Start\n  Settings",
-  "cells": [ { "x": 0, "y": 0, "char": "W", "fg": "white", "bg": "black" } ] }
+  "cells": [ { "x": 0, "y": 0, "char": "W", "fg": "white", "bg": "black" } ],
+  "tree": [ { "role": "button", "name": "Start", "x": 2, "y": 1, "focused": false } ] }
 ```
 
-`text` = plain-text grid join; `cells` = per-cell JSON when `styled: true` (for color/style assertions, snapshots).
+`text` = plain-text grid join; `cells` = per-cell JSON when `styled: true`
+(for color/style assertions, snapshots); `tree` = heuristic a11y widgets
+when `tree: true` (roles `button`/`textinput`/`checkbox`, see `06` §6.1).
 
 ### assert
 
@@ -75,7 +78,7 @@ Returns:
   "condition": { "type": "text_visible", "text": "Dashboard" } }
 ```
 
-Condition types: `text_visible`, `text_not_visible`, `text_regex`, `exact_text`, `cursor_position`, `screen_changed`, `exit_code`, `not_crashed`, `crashed`.
+Condition types: `text_visible`, `text_not_visible`, `text_regex`, `exact_text`, `cursor_position`, `screen_changed`, `exit_code`, `not_crashed`, `crashed`, `role` (`{ type: "role", role, name }` — heuristic a11y widget).
 
 Full taxonomy in `06-assertion-snapshot-engine.md`.
 
