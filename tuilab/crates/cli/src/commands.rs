@@ -734,6 +734,7 @@ pub fn record(
     args: Vec<String>,
     out: Option<PathBuf>,
     terminal: Option<(u16, u16)>,
+    target: crate::emit::Target,
 ) -> i32 {
     let Some(command) = command else {
         eprintln!("record needs --command <binary> (see `tuilab record --help`)");
@@ -744,10 +745,10 @@ pub fn record(
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_else(|| "recording".to_string());
-        PathBuf::from(format!("{stem}-record.yaml"))
+        PathBuf::from(format!("{stem}-record.{}", target.extension()))
     });
     let (width, height) = terminal.unwrap_or((120, 40));
-    crate::recorder::run(&command, &args, &out, width, height)
+    crate::recorder::run(&command, &args, &out, width, height, target)
 }
 
 #[cfg(test)]

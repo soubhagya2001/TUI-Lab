@@ -69,12 +69,15 @@ enum Commands {
         /// Extra arguments for the binary (repeatable).
         #[arg(long)]
         arg: Vec<String>,
-        /// Output YAML path (default: <command>-record.yaml).
+        /// Output path (default: <command>-record.<ext for --target>).
         #[arg(long)]
         out: Option<PathBuf>,
         /// Terminal override, e.g. 120x40.
         #[arg(long, value_parser = parse_terminal)]
         terminal: Option<(u16, u16)>,
+        /// Emit SDK code instead of YAML: python|js|rust (default yaml).
+        #[arg(long, value_parser = tui_lab_cli::emit::Target::parse)]
+        target: Option<tui_lab_cli::emit::Target>,
     },
     /// JSON-lines engine mode for SDK sidecars (docs/09).
     Proto,
@@ -142,7 +145,14 @@ async fn main() {
             arg,
             out,
             terminal,
-        } => commands::record(command, arg, out, terminal),
+            target,
+        } => commands::record(
+            command,
+            arg,
+            out,
+            terminal,
+            target.unwrap_or(tui_lab_cli::emit::Target::Yaml),
+        ),
         Commands::Proto => proto::serve().await,
         Commands::Trace { zip, replay } => commands::trace(&zip, replay),
     };

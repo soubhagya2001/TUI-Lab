@@ -115,3 +115,60 @@ fn record_emits_replayable_yaml_without_sleeps() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn record_target_emits_sdk_programs() {
+    // P5-C1: --target renders the same session for each SDK (content
+    // assertions; execution belongs to the SDK suites).
+    for (target, out_name, markers) in [
+        (
+            "python",
+            "recorded.py",
+            vec!["TuiTest.launch", "expect_text", "press("],
+        ),
+        (
+            "js",
+            "recorded.js",
+            vec!["TuiTest.launch", "expectText", "press("],
+        ),
+        (
+            "rust",
+            "recorded.rs",
+            vec!["TuiTest::launch", "expect_text", "press("],
+        ),
+    ] {
+        let dir = scratch(&format!("target-{target}"));
+        let out = dir.join(out_name);
+        let mut child = Command::new(tuilab_bin())
+            .arg("record")
+            .arg("--command")
+            .arg(fixture_bin())
+            .arg("--out")
+            .arg(&out)
+            .arg("--target")
+            .arg(target)
+            .current_dir(&dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn tuilab record");
+        child
+            .stdin
+            .as_mut()
+            .expect("record stdin")
+            .write_all(&script())
+            .expect("write script");
+        drop(child.stdin.take());
+        let status = child.wait().expect("record exits");
+        assert!(status.success(), "record --target {target} exits 0");
+        let program = std::fs::read_to_string(&out).expect("read program");
+        for marker in markers {
+            assert!(
+                program.contains(marker),
+                "{target} emits {marker}:\n{program}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

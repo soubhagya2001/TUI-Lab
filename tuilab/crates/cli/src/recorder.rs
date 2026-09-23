@@ -16,7 +16,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use tui_lab_core::{NewSession, SessionRegistry};
-use tui_lab_input::{decode_key, Decode, Key};
+use tui_lab_input::{decode_key, decode_mouse, Decode, Key, MouseAction, MouseButton};
 use tui_lab_protocol::{Step, SuiteAssertion, TestFile, WaitForText};
 use tui_lab_pty::SpawnOptions;
 
@@ -53,8 +53,68 @@ impl Drop for RawGuard {
     }
 }
 
-/// Record `--command` to a YAML suite at `out`.
-pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) -> i32 {
+/// Best-effort SGR mouse tracking (1000 + 1006) for click capture.
+/// Dropped (disabled) on every exit path, like [`RawGuard`].
+struct MouseGuard {
+    active: bool,
+}
+
+impl MouseGuard {
+    fn acquire(interactive: bool) -> Self {
+        if !interactive {
+            return Self { active: false };
+        }
+        use std::io::Write as _;
+        let mut out = std::io::stdout().lock();
+        // Any write failing means no live terminal: record without mouse.
+        let active = out
+            .write_all(b"\x1b[?1000h\x1b[?1006h")
+            .and_then(|()| out.flush())
+            .is_ok();
+        Self { active }
+    }
+}
+
+impl Drop for MouseGuard {
+    fn drop(&mut self) {
+        if self.active {
+            use std::io::Write as _;
+            let mut out = std::io::stdout().lock();
+            if out
+                .write_all(b"\x1b[?1000l\x1b[?1006l")
+                .and_then(|()| out.flush())
+                .is_err()
+            {
+                eprintln!("warning: mouse tracking disable failed");
+            }
+        }
+    }
+}
+
+/// Synthesize one mouse step from a tracked click (C1).
+fn mouse_step(event: &tui_lab_input::MouseInput) -> Step {
+    use tui_lab_input::MouseInput;
+    let MouseInput { action, x, y } = *event;
+    let name = match action {
+        MouseAction::Press(MouseButton::Left) => format!("CLICK {x} {y}"),
+        MouseAction::Press(MouseButton::Right) => format!("RIGHT_CLICK {x} {y}"),
+        MouseAction::Press(MouseButton::Middle) => format!("MIDDLE_CLICK {x} {y}"),
+        MouseAction::Release(_) => format!("RELEASE {x} {y}"),
+        MouseAction::ScrollUp => format!("SCROLL_UP {x} {y}"),
+        MouseAction::ScrollDown => format!("SCROLL_DOWN {x} {y}"),
+    };
+    Step::Press(name)
+}
+
+/// Record `--command` to a suite at `out`, emitting `target` output.
+pub fn run(
+    command: &str,
+    args: &[String],
+    out: &Path,
+    width: u16,
+    height: u16,
+    target: crate::emit::Target,
+) -> i32 {
     let mut registry = SessionRegistry::new();
     let id = match registry.spawn(NewSession::new(SpawnOptions {
         command: command.to_string(),
@@ -73,6 +133,10 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
 
     let _raw = RawGuard::acquire();
     let interactive = std::io::stdout().is_terminal();
+    // SGR mouse tracking on our own terminal: clicks during recording
+    // arrive as `ESC[<…` bytes and synthesize CLICK/RELEASE steps.
+    // Best-effort (pipes have no mouse); always disabled on exit.
+    let _mouse = MouseGuard::acquire(interactive);
 
     // Stdin pump thread: blocking reads stay off the record loop.
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
@@ -151,9 +215,41 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
         // of the buffer for the next beat. Original bytes are forwarded
         // verbatim so replay matches the session byte-for-byte. Unknown
         // sequences (R2: `Decode::Skip`) are forwarded too but emit no
-        // step — and never accumulate in `carry`.
+        // step — and never accumulate in `carry`. Mouse events decode
+        // first: a tracked click synthesizes CLICK/RELEASE steps.
         let mut offset = 0;
         loop {
+            if beat[offset..].starts_with(b"\x1b[<") {
+                let (event, len) = decode_mouse(&beat[offset..]);
+                match (event, len) {
+                    (Some(event), len) => {
+                        let raw = beat[offset..offset + len].to_vec();
+                        offset += len;
+                        if let Ok(session) = registry.get_mut(&id) {
+                            if let Err(e) = session.pty.write_all(&raw) {
+                                eprintln!("record: forward to app failed: {e}");
+                                return EXIT_PTY_ERROR;
+                            }
+                        }
+                        flush_typing(&mut pending, &mut type_run);
+                        pending.push(mouse_step(&event));
+                        continue;
+                    }
+                    (None, 0) => break, // Partial event: wait for more bytes.
+                    (None, skip) => {
+                        // Junk mouse bytes: forward verbatim, emit nothing.
+                        let raw = beat[offset..offset + skip].to_vec();
+                        offset += skip;
+                        if let Ok(session) = registry.get_mut(&id) {
+                            if let Err(e) = session.pty.write_all(&raw) {
+                                eprintln!("record: forward to app failed: {e}");
+                                return EXIT_PTY_ERROR;
+                            }
+                        }
+                        continue;
+                    }
+                }
+            }
             let (key, len) = match decode_key(&beat[offset..]) {
                 Decode::Incomplete => break,
                 Decode::Skip(len) => (None, len),
@@ -226,6 +322,19 @@ pub fn run(command: &str, args: &[String], out: &Path, width: u16, height: u16) 
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_else(|| "recorded".to_string());
+    if target != crate::emit::Target::Yaml {
+        let program = crate::emit::render(target, &name, command, &steps);
+        return match std::fs::write(out, program) {
+            Ok(()) => {
+                println!("wrote {}", out.display());
+                EXIT_OK
+            }
+            Err(e) => {
+                eprintln!("record: write {}: {e}", out.display());
+                EXIT_CONFIG_ERROR
+            }
+        };
+    }
     let file = TestFile {
         schema: TestFile::schema_id().to_string(),
         name,

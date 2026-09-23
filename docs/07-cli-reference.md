@@ -26,6 +26,8 @@ tuilab run tests/ --retries 2
 
 # Interactive recording (drives the app, emits YAML with smart waits)
 tuilab record --command "./codegraph" --out tests/codegen.yaml
+# --target python|js|rust emits SDK code; clicks synthesize CLICK steps
+tuilab record --command "./codegraph" --target python --out tests/codegen.py
 # end with Ctrl+\ or stdin EOF; quit the app first (see docs/10)
 
 # Re-render stored results (JUnit or self-contained HTML)

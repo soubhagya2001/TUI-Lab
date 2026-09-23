@@ -57,6 +57,98 @@ pub fn mouse_scroll_down(x: u16, y: u16) -> Vec<u8> {
     sgr(65, x, y, false)
 }
 
+/// A decoded incoming mouse action (what the user's terminal sends while
+/// recording with tracking enabled).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseAction {
+    /// Button press.
+    Press(MouseButton),
+    /// Button-coded release.
+    Release(MouseButton),
+    /// Wheel up tick.
+    ScrollUp,
+    /// Wheel down tick.
+    ScrollDown,
+}
+
+/// Decoded mouse input plus its 1-based cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseInput {
+    /// What happened.
+    pub action: MouseAction,
+    /// 1-based column.
+    pub x: u16,
+    /// 1-based row.
+    pub y: u16,
+}
+
+/// Decode `ESC [ < Cb ; Cx ; Cy M|m` at the front of `buf`.
+///
+/// Returns `(Some(event), len)` on success, `(None, 0)` when the buffer may
+/// hold a partial event (wait for more bytes), and `(None, skip)` for junk
+/// that must be dropped to keep recorder `carry` bounded. Motion events
+/// (button held while moving) are skipped as noise — drags still record as
+/// their press + release pair.
+pub fn decode_mouse(buf: &[u8]) -> (Option<MouseInput>, usize) {
+    const PREFIX: &[u8] = b"\x1b[<";
+    const MAX_SCAN: usize = 32;
+    if !buf.starts_with(PREFIX) {
+        return (None, 0);
+    }
+    let scan_end = buf.len().min(MAX_SCAN);
+    let Some(rel) = buf[PREFIX.len()..scan_end]
+        .iter()
+        .position(|&b| b == b'M' || b == b'm')
+    else {
+        // No terminator yet: partial event if the buffer is plausibly a
+        // prefix, junk if it already overran the cap.
+        return if buf.len() >= MAX_SCAN {
+            (None, PREFIX.len())
+        } else {
+            (None, 0)
+        };
+    };
+    let end = PREFIX.len() + rel;
+    let release = buf[end] == b'm';
+    let mut parts = buf[PREFIX.len()..end].split(|&b| b == b';');
+    let (Some(cb), Some(x), Some(y), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return (None, end + 1);
+    };
+    let number = |digits: &[u8]| {
+        std::str::from_utf8(digits)
+            .ok()
+            .and_then(|text| text.parse::<u16>().ok())
+    };
+    let (Some(cb), Some(x), Some(y)) = (number(cb), number(x), number(y)) else {
+        return (None, end + 1);
+    };
+    // Motion flag: position noise between press and release — skip it.
+    if !release && cb & 32 == 32 {
+        return (None, end + 1);
+    }
+    let button = match cb & 0b11 {
+        0 => MouseButton::Left,
+        1 => MouseButton::Middle,
+        2 => MouseButton::Right,
+        // Generic Cb=3 release cannot be attributed — skip.
+        _ => return (None, end + 1),
+    };
+    let action = match (cb, release) {
+        (64, false) => MouseAction::ScrollUp,
+        (65, false) => MouseAction::ScrollDown,
+        (_, true) => MouseAction::Release(button),
+        (_, false) => MouseAction::Press(button),
+    };
+    let input = MouseInput {
+        action,
+        x: x.max(1),
+        y: y.max(1),
+    };
+    (Some(input), end + 1)
+}
+
 /// Drag byte shape: press-at-start + release-at-end, for format reference
 /// and byte-level tests. Live gestures must still travel as separate writes
 /// (see `encode_key` docs); this helper composes the pair.

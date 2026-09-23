@@ -1,8 +1,8 @@
 //! SGR mouse bytes: exact sequences, clamping, arity errors.
 
 use tui_lab_input::{
-    encode_key, mouse_drag, mouse_press, mouse_release, mouse_scroll_down, mouse_scroll_up,
-    MouseButton,
+    decode_mouse, encode_key, mouse_drag, mouse_press, mouse_release, mouse_scroll_down,
+    mouse_scroll_up, MouseAction, MouseButton,
 };
 
 #[test]
@@ -58,4 +58,34 @@ fn bad_arity_names_the_shape() {
     assert!(err.to_string().contains("2 coordinates"), "{err}");
     let err = encode_key("CLICK x y").expect_err("integers");
     assert!(err.to_string().contains("integers"), "{err}");
+}
+
+#[test]
+fn decode_mouse_reads_sgr_events() {
+    use tui_lab_input::MouseInput;
+    let (event, len) = decode_mouse(b"\x1b[<0;10;5Mrest");
+    assert_eq!(
+        event,
+        Some(MouseInput {
+            action: MouseAction::Press(MouseButton::Left),
+            x: 10,
+            y: 5,
+        })
+    );
+    assert_eq!(len, 10);
+    let (event, len) = decode_mouse(b"\x1b[<2;1;1m");
+    assert_eq!(
+        event.map(|event| event.action),
+        Some(MouseAction::Release(MouseButton::Right))
+    );
+    assert_eq!(len, 9);
+    let (event, _) = decode_mouse(b"\x1b[<64;30;2M");
+    assert_eq!(event.map(|event| event.action), Some(MouseAction::ScrollUp));
+    // Motion noise between drag endpoints is skipped, not emitted.
+    let (event, len) = decode_mouse(b"\x1b[<32;10;5M");
+    assert_eq!(event, None);
+    assert_eq!(len, 11);
+    // Partial prefix waits; garbage skips through its terminator.
+    assert_eq!(decode_mouse(b"\x1b[<0;1"), (None, 0));
+    assert_eq!(decode_mouse(b"\x1b[<99;1;1M").0.map(|e| e.action), None);
 }

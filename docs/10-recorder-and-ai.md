@@ -23,6 +23,24 @@ steps:
   - press: ENTER
 ```
 
+### Emission targets (`--target`)
+
+`record --target python|js|rust` renders the same session as a runnable SDK
+program instead of YAML (default `yaml`; output extension follows the
+target). Steps map 1:1 onto sidecar calls (`press`/`type`/`expect_text`/
+`snapshot`/`resize`/`close`); assertions and sleeps degrade to comments.
+Round-trip guarantee: decode→encode preserves bytes (see `key_decode`
+round-trip test).
+
+### Mouse synthesis
+
+With a live terminal, the recorder enables SGR mouse tracking for the
+session: clicks synthesize `CLICK x y` / `RIGHT_CLICK` / `SCROLL_UP|DOWN`
+steps, releases synthesize `RELEASE x y` (button-coded, ConPTY-safe).
+Motion noise between drag endpoints is forwarded but emits no steps, and
+unknown sequences skip with bounded carry — recording never stalls on
+exotic input. Piped (non-terminal) stdin records keyboard only.
+
 ### Smart waits (as built)
 
 No sleeps are ever emitted. After each beat the screen must settle (3

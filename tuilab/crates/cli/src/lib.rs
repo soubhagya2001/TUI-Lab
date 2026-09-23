@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod config;
 pub mod constants;
+pub mod emit;
 pub mod proto;
 pub mod recorder;
 pub mod utils;
