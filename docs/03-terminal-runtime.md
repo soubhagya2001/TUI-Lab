@@ -98,4 +98,26 @@ TUI redraw is async. Never assert immediately after input without a wait primiti
 write input -> poll screen buffer every 10-50ms until condition or timeout
 ```
 
+### P5-E2: scripted input pacing (PTY-layer only)
+
+Determinism here is **terminal-layer only** — no app hooks / virtual clocks.
+Suite-level defaults live under `timing:`; per-step `delay` overrides them.
+
+```yaml
+timing:
+  key_delay: 40ms    # gap between characters inside a `type` step
+  input_delay: 10ms  # delay before each press/type write hits the PTY
+steps:
+  - press: ENTER                 # uses input_delay
+  - press: { key: DOWN, delay: 100ms }  # overrides input_delay
+  - type: hello                  # uses key_delay between chars
+  - type: { text: world, delay: 50ms }  # overrides key_delay
+```
+
+Every write (paced or burst) is recorded as an input beat with a
+run-relative `at_ms` timestamp into `SuiteResult.input_trace` and the
+trace archive (`inputs.bin`), so `tuilab trace <zip> --replay-input`
+can reproduce original inter-key timing. MCP/proto/SDK surfaces accept
+optional `delay_ms` on press/type for the same purpose.
+
 See `04-test-protocol-spec.md` (`wait_for_text`) and `06-assertion-snapshot-engine.md`.

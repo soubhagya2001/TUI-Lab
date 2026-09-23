@@ -5,7 +5,8 @@
 
 use std::time::Instant;
 
-use crate::result::TraceChunk;
+use crate::constants::TRACE_MAX_BYTES;
+use crate::result::{InputBeat, TraceChunk};
 
 /// Live state for one suite execution (single session in Phase 3).
 pub struct TestContext {
@@ -27,6 +28,10 @@ pub struct TestContext {
     pub trace_bytes: usize,
     /// True once capture hit the cap (replay is a prefix).
     pub trace_truncated: bool,
+    /// Captured input writes with timestamps (P5-E2; same byte cap).
+    pub input_trace: Vec<InputBeat>,
+    /// Kept input byte count (cap accounting without re-summing).
+    pub input_trace_bytes: usize,
 }
 
 impl TestContext {
@@ -42,11 +47,25 @@ impl TestContext {
             trace: Vec::new(),
             trace_bytes: 0,
             trace_truncated: false,
+            input_trace: Vec::new(),
+            input_trace_bytes: 0,
         }
     }
 
     /// Milliseconds since the run started.
     pub fn elapsed_ms(&self) -> u64 {
         self.started_at.elapsed().as_millis() as u64
+    }
+
+    /// Record one input write for paced trace replay (capped like output).
+    pub fn record_input(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() || self.input_trace_bytes >= TRACE_MAX_BYTES {
+            return;
+        }
+        self.input_trace.push(InputBeat {
+            at_ms: self.elapsed_ms(),
+            bytes: bytes.to_vec(),
+        });
+        self.input_trace_bytes += bytes.len();
     }
 }

@@ -16,8 +16,8 @@ to the transport. Scope is tools only — no prompts/resources.
 | Tool | Input | Returns |
 |------|-------|---------|
 | `tui_launch` | `{ command, args?, cwd?, width?, height?, env? }` | `{ session_id, status, screen }` |
-| `tui_press` | `{ session_id, key }` | `{ ok, screen_changed }` |
-| `tui_type` | `{ session_id, text }` | `{ ok }` |
+| `tui_press` | `{ session_id, key, delay_ms? }` | `{ ok, screen_changed }` |
+| `tui_type` | `{ session_id, text, sensitive?, delay_ms? }` | `{ ok }` |
 | `tui_screen` | `{ session_id, style?, tree? }` | `{ width, height, cursor, text, cells?, tree? }` |
 | `tui_wait_for_text` | `{ session_id, text, timeout_ms?, regex? }` | `{ found, elapsed_ms, screen }` |
 | `tui_assert` | `{ session_id, assertion }` | `{ passed, detail }` |
@@ -40,6 +40,10 @@ Phase 4 field notes (deviations from early sketches, kept honest):
     (`[{ role, name, x, y, focused }]`, roles `button`/`textinput`/
     `checkbox`) for agent targeting and `tui_assert { type: "role" }`
     (P5-E1, see `06` §6.1).
+*   `tui_press { delay_ms }` / `tui_type { delay_ms }` pace the write at
+    the PTY layer (pre-write pause / inter-character gap, P5-E2). Absent
+    = burst, matching YAML defaults; YAML suites use the `timing:` block
+    (see `05`).
 *   `tui_snapshot` returns `{ saved: true }` when it writes a new golden,
     `{ saved: false, diff }` when it compares.
 *   Allowlist patterns are regexes: `^\./.*`, `^cargo run.*`, `^python.*`

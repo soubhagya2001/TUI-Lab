@@ -56,6 +56,9 @@ pub enum Action {
         session_id: String,
         /// Key name (case-insensitive; see `tui-lab-input`).
         key: String,
+        /// Delay before this write hits the PTY, in milliseconds (P5-E2).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delay_ms: Option<u64>,
     },
     /// Type text verbatim (no Enter appended).
     Type {
@@ -66,6 +69,9 @@ pub enum Action {
         /// When true, redact from logs (secrets).
         #[serde(default)]
         sensitive: bool,
+        /// Gap between characters, in milliseconds (P5-E2).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delay_ms: Option<u64>,
     },
     /// Poll the screen until text appears (preferred over sleep).
     WaitForText {
@@ -160,8 +166,11 @@ const ACTION_FIELDS: &[(&str, &[&str])] = &[
             "timeout_ms",
         ],
     ),
-    ("press", &["action", "session_id", "key"]),
-    ("type", &["action", "session_id", "text", "sensitive"]),
+    ("press", &["action", "session_id", "key", "delay_ms"]),
+    (
+        "type",
+        &["action", "session_id", "text", "sensitive", "delay_ms"],
+    ),
     (
         "wait_for_text",
         &[

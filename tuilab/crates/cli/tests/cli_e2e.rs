@@ -255,8 +255,8 @@ fn run_step_mode_advances_on_piped_enters() {
 fn config_default_timeout_wires_into_waits() {
     // C5: `default_timeout` from tuilab.yaml becomes the wait default — a
     // stepless wait on absent text fails in ~100ms, not the 10s fallback.
-    use std::time::{Duration, Instant};
-
+    // Assert on the recorded wait step (not process wall-clock: kill grace
+    // after cleanup can add ~10s under parallel test load).
     let dir = scratch("wired-timeout");
     std::fs::write(dir.join("tuilab.yaml"), "default_timeout: 100ms\n").expect("config");
     let suite = write(
@@ -267,7 +267,6 @@ fn config_default_timeout_wires_into_waits() {
             fixture_bin()
         ),
     );
-    let started = Instant::now();
     let output = Command::new(tuilab())
         .arg("run")
         .arg(&suite)
@@ -275,10 +274,15 @@ fn config_default_timeout_wires_into_waits() {
         .output()
         .expect("run suite");
     assert_eq!(output.status.code(), Some(1), "wait failure exits 1");
+    let results_raw =
+        std::fs::read_to_string(dir.join("reports").join("results.json")).expect("results");
+    let results: serde_json::Value = serde_json::from_str(&results_raw).expect("parse results");
+    let wait_ms = results[0]["steps"][0]["duration_ms"]
+        .as_u64()
+        .expect("wait step duration");
     assert!(
-        started.elapsed() < Duration::from_secs(5),
-        "wired 100ms timeout must fail fast, took {:?}",
-        started.elapsed()
+        wait_ms < 2_000,
+        "wired 100ms timeout must fail fast, wait step took {wait_ms}ms"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -517,6 +521,42 @@ fn trace_replay_streams_raw_bytes() {
     assert!(
         String::from_utf8_lossy(&replayed.stdout).contains("TUI-LAB-SAMPLE"),
         "replay streams boot bytes"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn trace_replay_input_streams_recorded_beats() {
+    // P5-E2: --replay-input emits the recorded input bytes (keys typed).
+    let dir = scratch("replay-input");
+    let suite = write(
+        &dir,
+        "beats.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: beats\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - type: table\n  - assert_text:\n      contains: \"no-such-screen\"\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1));
+    let zip = dir.join("reports").join("traces").join("beats.zip");
+    assert!(zip.is_file(), "trace.zip retained on failure");
+    let replayed = Command::new(tuilab())
+        .arg("trace")
+        .arg(&zip)
+        .arg("--replay-input")
+        .current_dir(&dir)
+        .output()
+        .expect("trace replay-input");
+    assert!(replayed.status.success());
+    assert!(
+        String::from_utf8_lossy(&replayed.stdout).contains("table"),
+        "replay-input streams recorded input beats"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

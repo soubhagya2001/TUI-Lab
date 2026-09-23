@@ -31,6 +31,21 @@ pub struct Budgets {
     pub startup: Option<Duration>,
 }
 
+/// Suite-level input pacing (P5-E2, PTY-layer determinism).
+///
+/// Absent / zero delays keep the historic write-as-one-burst behavior.
+/// Per-step `delay` on `press`/`type` overrides these defaults.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Timing {
+    /// Gap between characters inside a `type` step.
+    #[serde(default, with = "humantime_opt")]
+    pub key_delay: Option<Duration>,
+    /// Delay before each `press`/`type` write hits the PTY.
+    #[serde(default, with = "humantime_opt")]
+    pub input_delay: Option<Duration>,
+}
+
 /// Top-level test file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,6 +90,9 @@ pub struct TestFile {
     /// Performance budgets (all optional; absent budgets never fail).
     #[serde(default)]
     pub budgets: Budgets,
+    /// Suite-level input pacing (optional; absent = burst writes).
+    #[serde(default)]
+    pub timing: Timing,
 }
 
 impl TestFile {
@@ -150,9 +168,9 @@ fn default_height() -> u16 {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     /// Send a named key.
-    Press(String),
+    Press(PressFor),
     /// Type text verbatim.
-    Type(String),
+    Type(TypeFor),
     /// Poll until text appears. Optional `timeout` (`2s` default policy).
     WaitForText(WaitForText),
     /// Escape hatch only — the recorder never emits this.
@@ -171,6 +189,56 @@ pub enum Step {
     Screenshot(SnapshotTake),
     /// Wait for the process to exit.
     WaitForExit(WaitForExit),
+}
+
+/// `press` payload: scalar key name, or `{ key, delay }` for paced sends.
+///
+/// YAML accepts both forms: `- press: ENTER` and
+/// `- press: { key: ENTER, delay: 100ms }`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PressFor {
+    /// Key name (`ENTER`, `DOWN`, `CTRL+C`, …).
+    pub key: String,
+    /// Delay before this write hits the PTY (overrides `timing.input_delay`).
+    #[serde(default, with = "humantime_opt")]
+    pub delay: Option<Duration>,
+}
+
+impl PressFor {
+    /// Scalar form: key with no per-step delay.
+    #[must_use]
+    pub fn key(key: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            delay: None,
+        }
+    }
+}
+
+/// `type` payload: scalar text, or `{ text, delay }` for paced typing.
+///
+/// YAML accepts both forms: `- type: hello` and
+/// `- type: { text: hello, delay: 50ms }` (`delay` = between characters).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypeFor {
+    /// Text to type verbatim.
+    pub text: String,
+    /// Gap between characters (overrides `timing.key_delay`).
+    #[serde(default, with = "humantime_opt")]
+    pub delay: Option<Duration>,
+}
+
+impl TypeFor {
+    /// Scalar form: text with no per-step delay.
+    #[must_use]
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            delay: None,
+        }
+    }
 }
 
 /// `wait_for_text` payload.
@@ -380,8 +448,20 @@ impl Serialize for Step {
         use serde::ser::SerializeMap as _;
         let mut map = ser.serialize_map(Some(1))?;
         match self {
-            Self::Press(key) => map.serialize_entry("press", key)?,
-            Self::Type(text) => map.serialize_entry("type", text)?,
+            Self::Press(press) => {
+                if press.delay.is_none() {
+                    map.serialize_entry("press", &press.key)?;
+                } else {
+                    map.serialize_entry("press", press)?;
+                }
+            }
+            Self::Type(typed) => {
+                if typed.delay.is_none() {
+                    map.serialize_entry("type", &typed.text)?;
+                } else {
+                    map.serialize_entry("type", typed)?;
+                }
+            }
             Self::WaitForText(wait) => map.serialize_entry("wait_for_text", wait)?,
             Self::Sleep(sleep) => {
                 map.serialize_entry("sleep", &format!("{}ms", sleep.0.as_millis()))?
@@ -416,8 +496,8 @@ impl<'de> Deserialize<'de> for Step {
             .next()
             .ok_or_else(|| serde::de::Error::custom("step must have exactly one key"))?;
         match key.as_str() {
-            "press" => convert::<String>(value).map(Step::Press),
-            "type" => convert::<String>(value).map(Step::Type),
+            "press" => parse_press(value).map(Step::Press),
+            "type" => parse_type(value).map(Step::Type),
             "wait_for_text" => convert::<WaitForText>(value).map(Step::WaitForText),
             "sleep" => convert::<SleepFor>(value).map(Step::Sleep),
             "resize" => convert::<ResizeTo>(value).map(Step::Resize),
@@ -438,6 +518,22 @@ fn convert<T: for<'de> Deserialize<'de>>(
     value: serde_yaml::Value,
 ) -> std::result::Result<T, String> {
     serde_yaml::from_value(value).map_err(|e| e.to_string())
+}
+
+/// `press`: scalar key name or `{ key, delay }` map (P5-E2).
+fn parse_press(value: serde_yaml::Value) -> std::result::Result<PressFor, String> {
+    if let Ok(key) = convert::<String>(value.clone()) {
+        return Ok(PressFor::key(key));
+    }
+    convert::<PressFor>(value)
+}
+
+/// `type`: scalar text or `{ text, delay }` map (P5-E2).
+fn parse_type(value: serde_yaml::Value) -> std::result::Result<TypeFor, String> {
+    if let Ok(text) = convert::<String>(value.clone()) {
+        return Ok(TypeFor::text(text));
+    }
+    convert::<TypeFor>(value)
 }
 
 impl<'de> Deserialize<'de> for SuiteAssertion {

@@ -14,4 +14,7 @@ pub mod utils;
 pub use html::{summarize_flakes, to_html, to_html_with_flakes, FlakeSummary};
 pub use json::{load_history, load_json, load_json_all, to_json, write_json, write_json_all};
 pub use junit::{to_junit, to_junit_all};
-pub use trace::{read_trace, render_timeline, replay_schedule, write_trace, Trace};
+pub use trace::{
+    input_replay_schedule, read_trace, render_timeline, replay_schedule, write_trace, Trace,
+    TraceInput,
+};

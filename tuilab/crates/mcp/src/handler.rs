@@ -285,6 +285,9 @@ impl TuiLabHandler {
         let bytes = encode_key(&params.key)
             .map_err(|e| tool_error("press", format!("{:?}: {e}", params.key)))?;
         let before = session.emu.text();
+        if let Some(ms) = params.delay_ms.filter(|ms| *ms > 0) {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        }
         session
             .pty
             .write_all(&bytes)
@@ -333,10 +336,29 @@ impl TuiLabHandler {
             .registry
             .get_mut(&params.session_id)
             .map_err(|e| tool_error("type", e))?;
-        session
-            .pty
-            .write_all(&encode_text(&params.text))
-            .map_err(|e| tool_error("type", e))?;
+        // P5-E2: optional per-character pacing (delay_ms).
+        match params.delay_ms.filter(|ms| *ms > 0) {
+            Some(ms) => {
+                let gap = std::time::Duration::from_millis(ms);
+                for (i, ch) in params.text.chars().enumerate() {
+                    if i > 0 {
+                        tokio::time::sleep(gap).await;
+                    }
+                    let mut buf = [0u8; 4];
+                    let bytes = ch.encode_utf8(&mut buf).as_bytes();
+                    session
+                        .pty
+                        .write_all(bytes)
+                        .map_err(|e| tool_error("type", e))?;
+                }
+            }
+            None => {
+                session
+                    .pty
+                    .write_all(&encode_text(&params.text))
+                    .map_err(|e| tool_error("type", e))?;
+            }
+        }
         if params.sensitive {
             tracing::info!(len = params.text.len(), "typed sensitive input");
             session

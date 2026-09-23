@@ -111,7 +111,11 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             })
             .to_string()
         }
-        Action::Press { session_id, key } => {
+        Action::Press {
+            session_id,
+            key,
+            delay_ms,
+        } => {
             let session = match registry.get_mut(&session_id) {
                 Ok(session) => session,
                 Err(e) => return error_response(&e.to_string()),
@@ -121,6 +125,9 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 Err(e) => return error_response(&format!("{key:?}: {e}")),
             };
             let before = session.emu.text();
+            if let Some(ms) = delay_ms.filter(|ms| *ms > 0) {
+                std::thread::sleep(Duration::from_millis(ms));
+            }
             if let Err(e) = session.pty.write_all(&bytes) {
                 return error_response(&e.to_string());
             }
@@ -132,13 +139,32 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
             session_id,
             text,
             sensitive,
+            delay_ms,
         } => {
             let session = match registry.get_mut(&session_id) {
                 Ok(session) => session,
                 Err(e) => return error_response(&e.to_string()),
             };
-            if let Err(e) = session.pty.write_all(&encode_text(&text)) {
-                return error_response(&e.to_string());
+            // P5-E2: optional per-character pacing (delay_ms).
+            match delay_ms.filter(|ms| *ms > 0) {
+                Some(ms) => {
+                    let gap = Duration::from_millis(ms);
+                    for (i, ch) in text.chars().enumerate() {
+                        if i > 0 {
+                            std::thread::sleep(gap);
+                        }
+                        let mut buf = [0u8; 4];
+                        let bytes = ch.encode_utf8(&mut buf).as_bytes();
+                        if let Err(e) = session.pty.write_all(bytes) {
+                            return error_response(&e.to_string());
+                        }
+                    }
+                }
+                None => {
+                    if let Err(e) = session.pty.write_all(&encode_text(&text)) {
+                        return error_response(&e.to_string());
+                    }
+                }
             }
             // Never echo sensitive text anywhere (logs carry length only).
             session.input_history.push(if sensitive {

@@ -160,12 +160,13 @@ fn take_snapshot(sess: &PtySession, emu: &mut Emulator, name: &str) {
 async fn run_steps(sess: &mut PtySession, emu: &mut Emulator, steps: &[Step]) {
     for step in steps {
         match step {
-            Step::Press(key) => {
-                let bytes = encode_key(key).expect("encode key");
+            Step::Press(press) => {
+                let bytes = encode_key(&press.key).expect("encode key");
                 sess.write_all(&bytes).expect("write key");
             }
-            Step::Type(text) => {
-                sess.write_all(&encode_text(text)).expect("write text");
+            Step::Type(typed) => {
+                sess.write_all(&encode_text(&typed.text))
+                    .expect("write text");
             }
             Step::WaitForText(wait) => {
                 live_screen(sess, emu, &wait.text, wait.timeout.unwrap_or(WAIT_TIMEOUT)).await;

@@ -40,10 +40,14 @@ reports stay diffable run-over-run.
 
 Failing suites additionally retain `reports/traces/<suite>.zip`: a
 dependency-free stored-zip holding `trace.json` (step timeline with
-`started_ms`/`duration_ms`, failure evidence, chunk index) and `pty.bin`
-(raw bytes, capped at 256 KiB). `tuilab trace <zip>` renders the timeline;
-`tuilab trace <zip> --replay` streams the bytes with original pacing
-(gaps capped at 1s). Use `--trace always|never` to override the
+`started_ms`/`duration_ms`, failure evidence, chunk index, input-beat
+index), `pty.bin` (raw output bytes, capped at 256 KiB), and
+`inputs.bin` (raw input writes with `at_ms` timestamps, same cap).
+`tuilab trace <zip>` renders the timeline;
+`tuilab trace <zip> --replay` streams the output bytes with original
+pacing; `tuilab trace <zip> --replay-input` streams the recorded input
+beats with original inter-key timing (P5-E2; gaps capped at 1s in both
+modes). Use `--trace always|never` to override the
 retain-on-failure default.
 
 Phase 3 implements the core subset; env redaction beyond `sensitive

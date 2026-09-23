@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use tui_lab_assertions::{evaluate, Condition, ScreenView};
 use tui_lab_input::{encode_key, encode_text};
-use tui_lab_protocol::{Step, SuiteAssertion, TestFile, TextAssertion};
+use tui_lab_protocol::{Step, SuiteAssertion, TestFile, TextAssertion, Timing};
 use tui_lab_pty::{PtySession, SpawnOptions};
 use tui_lab_runtime::wait_for_text;
 use tui_lab_snapshots::{compile_masks, load_text};
@@ -89,6 +89,8 @@ struct Session<'a> {
     pty: &'a mut PtySession,
     emu: &'a mut Emulator,
     opts: &'a RunOptions,
+    /// Suite-level pacing defaults (P5-E2).
+    timing: &'a Timing,
 }
 
 /// Execute a parsed suite file end to end.
@@ -175,6 +177,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                 },
                 trace: Vec::new(),
                 trace_truncated: false,
+                input_trace: Vec::new(),
                 attachments: Vec::new(),
             });
         }
@@ -196,6 +199,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                     pty: &mut pty,
                     emu: &mut emu,
                     opts,
+                    timing: &file.timing,
                 },
                 step,
             )
@@ -251,6 +255,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                 pty: &mut pty,
                 emu: &mut emu,
                 opts,
+                timing: &file.timing,
             },
             step,
         )
@@ -350,6 +355,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         failure,
         trace: std::mem::take(&mut ctx.trace),
         trace_truncated: ctx.trace_truncated,
+        input_trace: std::mem::take(&mut ctx.input_trace),
         attachments: Vec::new(),
         terminal: TerminalInfo {
             width: file.terminal.width,
@@ -362,8 +368,14 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
 /// One-line human description for reports.
 fn describe(step: &Step) -> String {
     match step {
-        Step::Press(key) => format!("press {key}"),
-        Step::Type(text) => format!("type {text:?}"),
+        Step::Press(press) => match press.delay {
+            Some(delay) => format!("press {} (delay {delay:?})", press.key),
+            None => format!("press {}", press.key),
+        },
+        Step::Type(typed) => match typed.delay {
+            Some(delay) => format!("type {:?} (delay {delay:?}/char)", typed.text),
+            None => format!("type {:?}", typed.text),
+        },
         Step::WaitForText(wait) => format!("wait_for_text {:?}", wait.text),
         Step::Sleep(sleep) => format!("sleep {:?}", sleep.0),
         Step::Resize(to) => format!("resize {}x{}", to.width, to.height),
@@ -374,6 +386,91 @@ fn describe(step: &Step) -> String {
             format!("snapshot {:?}", take.name)
         }
         Step::WaitForExit(wait) => format!("wait_for_exit {:?}", wait.timeout),
+    }
+}
+
+/// Paced PTY write (P5-E2): optional delay before the write, and optional
+/// per-character gap when `between` is set (type). Always records an input
+/// beat for trace replay — even burst writes (no delays) land in the beat
+/// log so timelines show every key.
+async fn write_input(
+    session: &mut Session<'_>,
+    bytes: &[u8],
+    before: Option<Duration>,
+    between: Option<Duration>,
+) -> Result<()> {
+    if let Some(delay) = before.filter(|d| !d.is_zero()) {
+        tokio::time::sleep(delay).await;
+    }
+    match between {
+        Some(gap) if !gap.is_zero() => {
+            // Character-oriented pacing: write UTF-8 chunks split on char
+            // boundaries so multi-byte sequences never tear.
+            for chunk in char_chunks(bytes) {
+                if !chunk.is_empty() {
+                    session
+                        .pty
+                        .write_all(chunk)
+                        .map_err(|e| CoreError::Pty(e.to_string()))?;
+                    session.ctx.record_input(chunk);
+                    tokio::time::sleep(gap).await;
+                }
+            }
+        }
+        _ => {
+            session
+                .pty
+                .write_all(bytes)
+                .map_err(|e| CoreError::Pty(e.to_string()))?;
+            session.ctx.record_input(bytes);
+        }
+    }
+    Ok(())
+}
+
+/// Split a byte buffer on UTF-8 char boundaries (invalid tails stay intact).
+fn char_chunks(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let len = utf8_len(bytes[i]);
+        if len == 0 {
+            // Invalid lead: treat as a single byte so we never stall.
+            i += 1;
+            if i >= bytes.len() {
+                out.push(&bytes[start..i]);
+                start = i;
+            }
+            continue;
+        }
+        i += len;
+        if i >= bytes.len() {
+            out.push(&bytes[start..i.min(bytes.len())]);
+            start = i.min(bytes.len());
+            break;
+        }
+        // Emit the previous complete char when the next lead starts.
+        let next_lead = i;
+        if next_lead > start {
+            out.push(&bytes[start..next_lead]);
+            start = next_lead;
+        }
+    }
+    if start < bytes.len() {
+        out.push(&bytes[start..]);
+    }
+    out
+}
+
+/// Expected UTF-8 sequence length for a lead byte (0 = invalid).
+fn utf8_len(lead: u8) -> usize {
+    match lead {
+        0x00..=0x7F => 1,
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => 0,
     }
 }
 
@@ -530,30 +627,32 @@ async fn assert_poll(session: &mut Session<'_>, assertion: &TextAssertion) -> Re
 
 async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome> {
     let outcome = match step {
-        Step::Press(key) => {
-            let bytes = encode_key(key).map_err(|e| CoreError::Message(format!("{key:?}: {e}")))?;
-            session
-                .pty
-                .write_all(&bytes)
-                .map_err(|e| CoreError::Pty(e.to_string()))?;
-            session.ctx.input_history.push(format!("press {key}"));
-            StepOutcome {
-                passed: true,
-                detail: format!("sent {key}"),
-            }
-        }
-        Step::Type(text) => {
-            session
-                .pty
-                .write_all(&encode_text(text))
-                .map_err(|e| CoreError::Pty(e.to_string()))?;
+        Step::Press(press) => {
+            let bytes = encode_key(&press.key)
+                .map_err(|e| CoreError::Message(format!("{:?}: {e}", press.key)))?;
+            let before = press.delay.or(session.timing.input_delay);
+            write_input(session, &bytes, before, None).await?;
             session
                 .ctx
                 .input_history
-                .push(format!("type[len={}]", text.len()));
+                .push(format!("press {}", press.key));
             StepOutcome {
                 passed: true,
-                detail: format!("typed {} chars", text.len()),
+                detail: format!("sent {}", press.key),
+            }
+        }
+        Step::Type(typed) => {
+            let bytes = encode_text(&typed.text);
+            let before = typed.delay.or(session.timing.input_delay);
+            let between = typed.delay.or(session.timing.key_delay);
+            write_input(session, &bytes, before, between).await?;
+            session
+                .ctx
+                .input_history
+                .push(format!("type[len={}]", typed.text.len()));
+            StepOutcome {
+                passed: true,
+                detail: format!("typed {} chars", typed.text.len()),
             }
         }
         Step::WaitForText(wait) => {

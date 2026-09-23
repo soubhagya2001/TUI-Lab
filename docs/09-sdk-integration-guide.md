@@ -29,7 +29,10 @@ The contract is pinned by `tuilab/crates/cli/tests/proto_roundtrip.rs`
 workspace `target/debug` layout. Engine errors surface as `TuiLabError`
 carrying the reply dict (step/session context intact); transport breakdowns
 (non-JSON, EOF, timeouts) raise the same type. `type(..., sensitive=True)`
-never logs the text. `Runner.run("test.yaml")` shells `tuilab run` and
+never logs the text. Optional `delay_ms` on `press`/`type` (Python
+keyword, JS trailing arg, Rust `press_delayed`/`type_text_delayed`) paces
+writes at the PTY layer (P5-E2, same `delay_ms` as the JSON protocol).
+`Runner.run("test.yaml")` shells `tuilab run` and
 returns parsed `reports/results.json`, raising on infra exit codes (2–4).
 
 ```

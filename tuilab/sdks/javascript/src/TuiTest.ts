@@ -68,29 +68,27 @@ export class TuiTest {
   }
 
   /** Send a named key; returns whether the screen changed. */
-  async press(key: string): Promise<boolean> {
-    const reply = check(
-      await this.conn.request({
-        action: "press",
-        session_id: this.sessionId,
-        key,
-      }),
-      "press"
-    );
+  async press(key: string, delayMs?: number): Promise<boolean> {
+    const action: JsonDict = {
+      action: "press",
+      session_id: this.sessionId,
+      key,
+    };
+    if (delayMs) action["delay_ms"] = delayMs;
+    const reply = check(await this.conn.request(action), "press");
     return Boolean(reply["screen_changed"] ?? false);
   }
 
   /** Type text verbatim (sensitive redacts it from logs). */
-  async type(text: string, sensitive = false): Promise<void> {
-    check(
-      await this.conn.request({
-        action: "type",
-        session_id: this.sessionId,
-        text,
-        sensitive,
-      }),
-      "type"
-    );
+  async type(text: string, sensitive = false, delayMs?: number): Promise<void> {
+    const action: JsonDict = {
+      action: "type",
+      session_id: this.sessionId,
+      text,
+      sensitive,
+    };
+    if (delayMs) action["delay_ms"] = delayMs;
+    check(await this.conn.request(action), "type");
   }
 
   /** Current screen grid (text, cursor, dimensions; cells/tree when asked). */

@@ -32,9 +32,62 @@
       "additionalProperties": false
     },
     "setup": { "type": "array" },
-    "steps": { "type": "array" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "press": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "required": ["key"],
+                "properties": {
+                  "key": { "type": "string" },
+                  "delay": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "type": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": { "type": "string" },
+                  "delay": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      }
+    },
     "cleanup": { "type": "array" },
-    "assertions": { "type": "array" }
+    "assertions": { "type": "array" },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "step": { "type": "string" },
+        "suite": { "type": "string" },
+        "startup": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "key_delay": { "type": "string" },
+        "input_delay": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

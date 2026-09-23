@@ -158,6 +158,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_press(Parameters(PressParams {
             session_id: id.clone(),
             key: "DOWN".to_string(),
+            delay_ms: None,
         }))
         .await
         .expect("press")
@@ -168,6 +169,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_press(Parameters(PressParams {
             session_id: id.clone(),
             key: "ENTER".to_string(),
+            delay_ms: None,
         }))
         .await
         .expect("enter");
@@ -239,6 +241,7 @@ async fn mode_a_loop_against_fixture() {
         .tui_press(Parameters(PressParams {
             session_id: id.clone(),
             key: "F13".to_string(),
+            delay_ms: None,
         }))
         .await
         .is_err());
@@ -257,6 +260,7 @@ async fn mode_a_loop_against_fixture() {
             session_id: id.clone(),
             text: "s3cret".to_string(),
             sensitive: true,
+            delay_ms: None,
         }))
         .await
         .expect("type")
@@ -647,6 +651,7 @@ async fn audit_log_records_calls_and_redacts_secrets() {
             session_id: id.clone(),
             text: "s3cret".to_string(),
             sensitive: true,
+            delay_ms: None,
         }))
         .await
         .expect("type");
@@ -654,6 +659,7 @@ async fn audit_log_records_calls_and_redacts_secrets() {
         .tui_press(Parameters(PressParams {
             session_id: id.clone(),
             key: "F13".to_string(),
+            delay_ms: None,
         }))
         .await
         .is_err());

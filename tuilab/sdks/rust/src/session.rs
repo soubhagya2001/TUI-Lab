@@ -71,23 +71,48 @@ impl TuiTest {
     }
 
     /// Send a named key; returns whether the screen changed.
+    ///
+    /// `delay_ms` pauses before the write hits the PTY (P5-E2 pacing).
     pub async fn press(&mut self, key: &str) -> Result<bool, TuiLabError> {
-        let reply = self
-            .act(
-                json!({"action": "press", "session_id": self.session_id, "key": key}),
-                "press",
-            )
-            .await?;
+        self.press_delayed(key, None).await
+    }
+
+    /// `press` with an optional pre-write delay in milliseconds.
+    pub async fn press_delayed(
+        &mut self,
+        key: &str,
+        delay_ms: Option<u64>,
+    ) -> Result<bool, TuiLabError> {
+        let mut action = json!({"action": "press", "session_id": self.session_id, "key": key});
+        if delay_ms.is_some() {
+            action["delay_ms"] = json!(delay_ms);
+        }
+        let reply = self.act(action, "press").await?;
         Ok(reply.get("screen_changed") == Some(&Value::Bool(true)))
     }
 
     /// Type text verbatim (`sensitive` redacts it from logs).
     pub async fn type_text(&mut self, text: &str, sensitive: bool) -> Result<(), TuiLabError> {
-        self.act(
-            json!({"action": "type", "session_id": self.session_id, "text": text, "sensitive": sensitive}),
-            "type",
-        )
-        .await?;
+        self.type_text_delayed(text, sensitive, None).await
+    }
+
+    /// `type_text` with an optional inter-character delay in milliseconds.
+    pub async fn type_text_delayed(
+        &mut self,
+        text: &str,
+        sensitive: bool,
+        delay_ms: Option<u64>,
+    ) -> Result<(), TuiLabError> {
+        let mut action = json!({
+            "action": "type",
+            "session_id": self.session_id,
+            "text": text,
+            "sensitive": sensitive,
+        });
+        if delay_ms.is_some() {
+            action["delay_ms"] = json!(delay_ms);
+        }
+        self.act(action, "type").await?;
         Ok(())
     }
     /// Current screen grid (text, cursor, dimensions; cells/tree when asked).

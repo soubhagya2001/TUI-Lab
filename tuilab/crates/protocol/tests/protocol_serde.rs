@@ -225,3 +225,125 @@ fn durations_parse_units_and_reject_overflow() {
     // u64::MAX minutes overflows seconds — must error, never wrap.
     assert!(parse_duration("18446744073709551615m").is_err());
 }
+
+// --- P5-E2: timing + scalar/map press/type ---
+
+#[test]
+fn press_type_scalar_and_map_forms_round_trip() {
+    let yaml = r#"
+schema: tui-lab/v1
+name: pacing
+application:
+  command: ./app
+timing:
+  key_delay: 40ms
+  input_delay: 10ms
+steps:
+  - press: ENTER
+  - press:
+      key: DOWN
+      delay: 100ms
+  - type: hello
+  - type:
+      text: world
+      delay: 50ms
+assertions: []
+"#;
+    let file = TestFile::from_yaml(yaml).expect("parse timing suite");
+    assert_eq!(
+        file.timing.key_delay,
+        Some(std::time::Duration::from_millis(40))
+    );
+    assert_eq!(
+        file.timing.input_delay,
+        Some(std::time::Duration::from_millis(10))
+    );
+    match &file.steps[0] {
+        Step::Press(p) => {
+            assert_eq!(p.key, "ENTER");
+            assert_eq!(p.delay, None);
+        }
+        other => panic!("expected press scalar, got {other:?}"),
+    }
+    match &file.steps[1] {
+        Step::Press(p) => {
+            assert_eq!(p.key, "DOWN");
+            assert_eq!(p.delay, Some(std::time::Duration::from_millis(100)));
+        }
+        other => panic!("expected press map, got {other:?}"),
+    }
+    match &file.steps[2] {
+        Step::Type(t) => {
+            assert_eq!(t.text, "hello");
+            assert_eq!(t.delay, None);
+        }
+        other => panic!("expected type scalar, got {other:?}"),
+    }
+    match &file.steps[3] {
+        Step::Type(t) => {
+            assert_eq!(t.text, "world");
+            assert_eq!(t.delay, Some(std::time::Duration::from_millis(50)));
+        }
+        other => panic!("expected type map, got {other:?}"),
+    }
+    // Serialize straight back: scalar forms stay scalar (no delay → no map).
+    let back = serde_yaml::to_string(&file).expect("re-serialize");
+    assert!(
+        back.contains("- press: ENTER"),
+        "scalar press kept:\n{back}"
+    );
+    assert!(back.contains("- type: hello"), "scalar type kept:\n{back}");
+    assert!(back.contains("key: DOWN"), "map press kept:\n{back}");
+    assert!(back.contains("text: world"), "map type kept:\n{back}");
+    assert!(back.contains("key_delay: 40ms"), "timing kept:\n{back}");
+    let again = TestFile::from_yaml(&back).expect("re-parse round trip");
+    assert_eq!(again, file);
+}
+
+#[test]
+fn press_with_unknown_map_fields_is_an_error() {
+    let yaml = r#"
+schema: tui-lab/v1
+name: bad
+application:
+  command: ./app
+steps:
+  - press:
+      key: ENTER
+      bogus: 1
+"#;
+    assert!(TestFile::from_yaml(yaml).is_err());
+}
+
+#[test]
+fn action_press_type_delay_ms_round_trip() {
+    let sid = "sess_e2";
+    let press = Action::from_json(&format!(
+        r#"{{"action":"press","session_id":"{sid}","key":"ENTER","delay_ms":25}}"#
+    ))
+    .expect("parse press delay");
+    match press {
+        Action::Press {
+            delay_ms, ref key, ..
+        } => {
+            assert_eq!(key, "ENTER");
+            assert_eq!(delay_ms, Some(25));
+        }
+        other => panic!("expected press, got {other:?}"),
+    }
+    let back = press.to_json().expect("serialize");
+    let again = Action::from_json(&back).expect("re-parse");
+    assert_eq!(press, again);
+
+    let typed = Action::from_json(&format!(
+        r#"{{"action":"type","session_id":"{sid}","text":"hi","sensitive":false,"delay_ms":10}}"#
+    ))
+    .expect("parse type delay");
+    match typed {
+        Action::Type { delay_ms, text, .. } => {
+            assert_eq!(text, "hi");
+            assert_eq!(delay_ms, Some(10));
+        }
+        other => panic!("expected type, got {other:?}"),
+    }
+}

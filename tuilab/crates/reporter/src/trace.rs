@@ -51,6 +51,17 @@ pub struct Trace {
     pub chunk_at_ms: Vec<u64>,
     /// Byte lengths parallel to `chunk_at_ms`.
     pub chunk_lens: Vec<usize>,
+    /// Input beats with timestamps (P5-E2 paced input replay).
+    pub inputs: Vec<TraceInput>,
+}
+
+/// One recorded input write inside a trace.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TraceInput {
+    /// Milliseconds from run start.
+    pub at_ms: u64,
+    /// Raw bytes written to the PTY.
+    pub bytes: Vec<u8>,
 }
 
 /// Failure evidence inside a trace.
@@ -92,6 +103,9 @@ pub fn trace_document(result: &SuiteResult) -> serde_json::Value {
         },
         "truncated": result.trace_truncated,
         "steps": steps,
+        "inputs": result.input_trace.iter().map(|beat| {
+            serde_json::json!({"at_ms": beat.at_ms, "len": beat.bytes.len()})
+        }).collect::<Vec<_>>(),
         "failure": result.failure.as_ref().map(|failure| {
             serde_json::json!({
                 "step_index": failure.step_index,
@@ -115,9 +129,14 @@ pub fn write_trace(path: &std::path::Path, result: &SuiteResult) -> std::io::Res
     for chunk in &result.trace {
         pty_bytes.extend_from_slice(&chunk.bytes);
     }
+    let mut input_bytes = Vec::new();
+    for beat in &result.input_trace {
+        input_bytes.extend_from_slice(&beat.bytes);
+    }
     let files = [
         ("trace.json", json.as_slice()),
         ("pty.bin", pty_bytes.as_slice()),
+        ("inputs.bin", input_bytes.as_slice()),
     ];
     let bytes = zip_store(&files);
     if let Some(parent) = path.parent() {
@@ -216,6 +235,25 @@ pub fn read_trace(path: &std::path::Path) -> std::io::Result<Trace> {
         .find(|(name, _)| *name == "pty.bin")
         .map(|(_, data)| data.to_vec())
         .unwrap_or_default();
+    let input_bytes = files
+        .iter()
+        .find(|(name, _)| *name == "inputs.bin")
+        .map(|(_, data)| data.to_vec())
+        .unwrap_or_default();
+    let mut inputs = Vec::new();
+    let mut input_offset = 0usize;
+    if let Some(list) = document.get("inputs").and_then(|i| i.as_array()) {
+        for beat in list {
+            let at_ms = beat.get("at_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+            let len = beat.get("len").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let end = (input_offset + len).min(input_bytes.len());
+            inputs.push(TraceInput {
+                at_ms,
+                bytes: input_bytes[input_offset..end].to_vec(),
+            });
+            input_offset = end;
+        }
+    }
     Ok(Trace {
         suite: document
             .get("suite")
@@ -246,6 +284,7 @@ pub fn read_trace(path: &std::path::Path) -> std::io::Result<Trace> {
         pty_bytes,
         chunk_at_ms,
         chunk_lens,
+        inputs,
     })
 }
 
@@ -285,6 +324,22 @@ pub fn replay_schedule(trace: &Trace, max_gap_ms: u64) -> Vec<(Vec<u8>, u64)> {
         ));
         offset = end;
         prev_at = *at_ms;
+    }
+    out
+}
+
+/// Input replay schedule (P5-E2): `(bytes, sleep-before-ms)` pairs from the
+/// recorded input beats, gaps capped at `max_gap_ms`. Pure and unit-tested;
+/// the CLI/SDK sleeps + writes to reproduce paced typing.
+pub fn input_replay_schedule(trace: &Trace, max_gap_ms: u64) -> Vec<(Vec<u8>, u64)> {
+    let mut out = Vec::new();
+    let mut prev_at = 0u64;
+    for beat in &trace.inputs {
+        out.push((
+            beat.bytes.clone(),
+            beat.at_ms.saturating_sub(prev_at).min(max_gap_ms),
+        ));
+        prev_at = beat.at_ms;
     }
     out
 }
@@ -481,10 +536,39 @@ mod tests {
             pty_bytes: b"abcdef".to_vec(),
             chunk_at_ms: vec![0, 5000],
             chunk_lens: vec![2, 4],
+            inputs: Vec::new(),
         };
         let schedule = replay_schedule(&trace, 1000);
         assert_eq!(schedule.len(), 2);
         assert_eq!(schedule[0], (b"ab".to_vec(), 0));
         assert_eq!(schedule[1], (b"cdef".to_vec(), 1000));
+    }
+
+    #[test]
+    fn input_replay_schedule_caps_gaps() {
+        let trace = Trace {
+            suite: "x".to_string(),
+            steps: Vec::new(),
+            terminal: (80, 24, "xterm".to_string()),
+            failure: None,
+            truncated: false,
+            pty_bytes: Vec::new(),
+            chunk_at_ms: Vec::new(),
+            chunk_lens: Vec::new(),
+            inputs: vec![
+                TraceInput {
+                    at_ms: 0,
+                    bytes: b"h".to_vec(),
+                },
+                TraceInput {
+                    at_ms: 5000,
+                    bytes: b"i".to_vec(),
+                },
+            ],
+        };
+        let schedule = input_replay_schedule(&trace, 1000);
+        assert_eq!(schedule.len(), 2);
+        assert_eq!(schedule[0], (b"h".to_vec(), 0));
+        assert_eq!(schedule[1], (b"i".to_vec(), 1000));
     }
 }

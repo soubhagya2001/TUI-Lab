@@ -95,4 +95,4 @@ Tracked-but-ignored watchlist (verified clean 2026-09-21 — re-check before eac
 
 Locators/role + a11y-tree dump · trace viewer (`trace.zip`: timeline + raw bytes + replay) · `record --target=python|js|rust` + mouse synthesis · fixtures/sharding (`--shard`, `--retries`, `skip/focus`, tags) · pixel/Sixel diff · fake timers + fetch stubs · perf budgets (`startup/render/latency`) · scrollback search, clipboard, hover/drag, resize-matrix helper · report attachments + waterfall + flake history · MCP `tui_resize` (real tool, not the `web-guide/search.ts:47` invention) + audit logging.
 
-Status (grilled program order A→E2): A fixtures ✓ · B1 trace ✓ · B2 reports ✓ · C1 record ✓ · C2 terminal ✓ · D1 pixel/Sixel ✓ · D2 budgets ✓ · **E1 a11y/role ✓** · E2 timing (next).
+Status (grilled program order A→E2): A fixtures ✓ · B1 trace ✓ · B2 reports ✓ · C1 record ✓ · C2 terminal ✓ · D1 pixel/Sixel ✓ · D2 budgets ✓ · **E1 a11y/role ✓** · **E2 timing ✓ (P5 complete)**.

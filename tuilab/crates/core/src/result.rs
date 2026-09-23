@@ -45,10 +45,22 @@ pub struct SuiteResult {
     /// True when byte capture hit the cap (replay is a prefix).
     #[serde(skip_serializing, default)]
     pub trace_truncated: bool,
+    /// Captured input writes with timestamps (P5-E2; in-memory + trace.zip).
+    #[serde(skip_serializing, default)]
+    pub input_trace: Vec<InputBeat>,
     /// Attached report files, relative to the reports dir
     /// (`attachments/<suite>/<file>`).
     #[serde(default)]
     pub attachments: Vec<String>,
+}
+
+/// One input write with its run-relative timestamp (P5-E2 paced replay).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InputBeat {
+    /// Milliseconds from run start.
+    pub at_ms: u64,
+    /// Raw bytes written to the PTY.
+    pub bytes: Vec<u8>,
 }
 
 /// One raw PTY read with its run-relative timestamp (trace replay pacing).

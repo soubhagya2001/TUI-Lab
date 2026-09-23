@@ -61,6 +61,9 @@ pub struct PressParams {
     /// Key name (`ENTER`, `DOWN`, `CTRL+C`, …). Always follow with
     /// `tui_wait_for_text` — never assert on a stale screen.
     pub key: String,
+    /// Optional delay before this write hits the PTY, in milliseconds (P5-E2).
+    #[serde(default)]
+    pub delay_ms: Option<u64>,
 }
 
 /// `tui_press` output.
@@ -83,6 +86,9 @@ pub struct TypeParams {
     /// Redact from logs (secrets). Always follow with `tui_wait_for_text`.
     #[serde(default)]
     pub sensitive: bool,
+    /// Optional gap between characters, in milliseconds (P5-E2).
+    #[serde(default)]
+    pub delay_ms: Option<u64>,
 }
 
 /// `tui_type` output (never echoes the text).

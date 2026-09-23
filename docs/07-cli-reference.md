@@ -41,10 +41,11 @@ tuilab report --format html --out index.html
 tuilab run tests/search.yaml --debug
 
 # Trace viewer: failures retain reports/traces/<suite>.zip (timeline +
-# raw bytes); render it or replay the session. --trace always|never
-# overrides the retain-on-failure default.
+# raw bytes); render it, replay output, or replay recorded inputs.
+# --trace always|never overrides the retain-on-failure default.
 tuilab trace reports/traces/search-flow.zip
 tuilab trace reports/traces/search-flow.zip --replay
+tuilab trace reports/traces/search-flow.zip --replay-input
 
 # Extra report inputs: suite `attachments:` files copy to
 # reports/attachments/<suite>/; every run appends reports/history.jsonl

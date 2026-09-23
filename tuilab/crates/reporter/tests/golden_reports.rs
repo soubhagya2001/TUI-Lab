@@ -48,6 +48,7 @@ fn fixture_result() -> SuiteResult {
             term: "xterm-256color".to_string(),
         },
         trace: Vec::new(),
+        input_trace: Vec::new(),
         trace_truncated: false,
         attachments: Vec::new(),
     }

@@ -13,7 +13,8 @@ use crate::constants::{
 use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult, TerminalInfo};
 use tui_lab_protocol::TestFile;
 use tui_lab_reporter::{
-    load_json_all, read_trace, render_timeline, replay_schedule, write_json_all, write_trace,
+    input_replay_schedule, load_json_all, read_trace, render_timeline, replay_schedule,
+    write_json_all, write_trace,
 };
 
 /// Scaffold `tuilab.yaml` + `tests/smoke.yaml` in `dir`.
@@ -433,6 +434,7 @@ fn skipped_result(name: &str) -> SuiteResult {
         },
         trace: Vec::new(),
         trace_truncated: false,
+        input_trace: Vec::new(),
         attachments: Vec::new(),
     }
 }
@@ -681,7 +683,7 @@ fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
 }
 
 /// Render a trace timeline, or replay its raw bytes with original pacing.
-pub fn trace(zip: &Path, replay: bool) -> i32 {
+pub fn trace(zip: &Path, replay: bool, replay_input: bool) -> i32 {
     let trace = match read_trace(zip) {
         Ok(trace) => trace,
         Err(e) => {
@@ -689,13 +691,20 @@ pub fn trace(zip: &Path, replay: bool) -> i32 {
             return EXIT_CONFIG_ERROR;
         }
     };
-    if !replay {
+    if !replay && !replay_input {
         print!("{}", render_timeline(&trace));
         return EXIT_OK;
     }
     use std::io::Write as _;
     let mut out = std::io::stdout().lock();
-    for (bytes, wait_ms) in replay_schedule(&trace, 1000) {
+    // P5-E2: `--replay-input` streams the recorded input beats; `--replay`
+    // streams the PTY output chunks (original behavior).
+    let schedule = if replay_input {
+        input_replay_schedule(&trace, 1000)
+    } else {
+        replay_schedule(&trace, 1000)
+    };
+    for (bytes, wait_ms) in schedule {
         if wait_ms > 0 {
             std::thread::sleep(std::time::Duration::from_millis(wait_ms));
         }

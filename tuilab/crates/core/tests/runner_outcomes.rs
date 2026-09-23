@@ -548,3 +548,57 @@ steps:
         failure.expected
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn input_trace_records_press_and_type_beats() {
+    // E2: every write lands in SuiteResult.input_trace with timestamps,
+    // even when no pacing delay is configured (burst mode).
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: beats
+application:
+  command: "{}"
+timing:
+  key_delay: 1ms
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: DOWN
+  - type: table
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(result.passed, "suite must pass: {:?}", result.failure);
+    assert!(
+        result.input_trace.len() >= 3,
+        "input beats captured: {}",
+        result.input_trace.len()
+    );
+    assert!(
+        result
+            .input_trace
+            .windows(2)
+            .all(|w| w[0].at_ms <= w[1].at_ms),
+        "beats are time-ordered"
+    );
+    // Paced type writes land as per-character beats; concatenating them
+    // must reconstruct the typed text (order preserved).
+    let joined: Vec<u8> = result
+        .input_trace
+        .iter()
+        .flat_map(|b| b.bytes.clone())
+        .collect();
+    assert!(
+        String::from_utf8_lossy(&joined).contains("table"),
+        "typed text captured across beats: {:?}",
+        result
+            .input_trace
+            .iter()
+            .map(|b| &b.bytes)
+            .collect::<Vec<_>>()
+    );
+}

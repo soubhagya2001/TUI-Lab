@@ -64,9 +64,9 @@ assertions:
 | Step | Shape | Notes |
 |------|-------|-------|
 | `launch` | `{ command, args?, cwd?, env? }` | Usually implicit from `application:` |
-| `press` | `"ENTER" \| "DOWN" \| "CTRL+C" \| "q"` | Named keys + literals |
+| `press` | `"ENTER" \| "DOWN" \| "CTRL+C" \| "q"` or `{ key, delay? }` | Named keys + literals; map form adds a pre-write delay (P5-E2) |
 | `press` (mouse) | `"CLICK x y" \| "RELEASE x y" \| "SCROLL_UP/DOWN x y"` | 1-based cells; gestures as separate steps (see `03` §3.3) |
-| `type` | `"search text"` | Verbatim typing |
+| `type` | `"search text"` or `{ text, delay? }` | Verbatim typing; map form adds an inter-character delay (P5-E2) |
 | `wait_for_text` | `{ text, timeout?, regex? }` | Polling wait — always prefer over `sleep` |
 | `sleep` | `"500ms"` | Escape hatch only (flaky, discouraged) |
 | `resize` | `{ width, height }` | e.g. 80x24, 120x40, 160x50, 40x15 |
@@ -77,6 +77,23 @@ assertions:
 | `wait_for_exit` | `{ timeout }` | For quit flows |
 
 Durations read as human strings: `500ms`, `3s`, `2m` (bare numbers mean milliseconds).
+
+### Suite-level timing (P5-E2, PTY-layer determinism)
+
+Optional `timing:` block sets default pacing for the whole suite
+(absent / zero delays keep the historic write-as-one-burst behavior):
+
+```yaml
+timing:
+  key_delay: 40ms    # gap between characters inside a `type` step
+  input_delay: 10ms  # delay before each press/type write hits the PTY
+steps:
+  - press: { key: DOWN, delay: 100ms }  # overrides input_delay
+  - type: { text: hello, delay: 50ms }  # overrides key_delay
+```
+
+Every write is also recorded as a timed input beat for trace replay
+(see `03` §3.5 and `11`).
 
 ## 5.4 Suite selection (tags / skip / focus / sharding)
 

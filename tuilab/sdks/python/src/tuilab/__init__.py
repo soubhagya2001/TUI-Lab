@@ -67,29 +67,33 @@ class TuiTest:
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
 
-    async def press(self, key: str) -> bool:
-        """Send a named key; returns whether the screen changed."""
-        reply = _check(
-            await self._conn.request(
-                {"action": "press", "session_id": self.session_id, "key": key}
-            ),
-            "press",
-        )
+    async def press(self, key: str, *, delay_ms: int | None = None) -> bool:
+        """Send a named key; returns whether the screen changed.
+
+        `delay_ms` pauses before the write hits the PTY (P5-E2 pacing).
+        """
+        action: dict = {"action": "press", "session_id": self.session_id, "key": key}
+        if delay_ms:
+            action["delay_ms"] = delay_ms
+        reply = _check(await self._conn.request(action), "press")
         return bool(reply.get("screen_changed", False))
 
-    async def type(self, text: str, *, sensitive: bool = False) -> None:
-        """Type text verbatim (sensitive redacts it from logs)."""
-        _check(
-            await self._conn.request(
-                {
-                    "action": "type",
-                    "session_id": self.session_id,
-                    "text": text,
-                    "sensitive": sensitive,
-                }
-            ),
-            "type",
-        )
+    async def type(
+        self, text: str, *, sensitive: bool = False, delay_ms: int | None = None
+    ) -> None:
+        """Type text verbatim (sensitive redacts it from logs).
+
+        `delay_ms` is the gap between characters (P5-E2 pacing).
+        """
+        action: dict = {
+            "action": "type",
+            "session_id": self.session_id,
+            "text": text,
+            "sensitive": sensitive,
+        }
+        if delay_ms:
+            action["delay_ms"] = delay_ms
+        _check(await self._conn.request(action), "type")
 
     async def screen(self, *, styled: bool = False, tree: bool = False) -> dict:
         """Current screen grid (text, cursor, dimensions; cells/tree when asked)."""

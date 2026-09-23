@@ -84,13 +84,17 @@ enum Commands {
     },
     /// JSON-lines engine mode for SDK sidecars (docs/09).
     Proto,
-    /// Render a trace.zip timeline, or replay its raw bytes (`--replay`).
+    /// Render a trace.zip timeline, or replay its raw bytes (`--replay`)
+    /// / recorded inputs (`--replay-input`).
     Trace {
         /// Trace archive from a run.
         zip: PathBuf,
         /// Stream raw PTY bytes to stdout with original pacing.
         #[arg(long)]
         replay: bool,
+        /// Stream recorded input bytes with original pacing (P5-E2).
+        #[arg(long)]
+        replay_input: bool,
     },
 }
 
@@ -159,7 +163,11 @@ async fn main() {
             target.unwrap_or(tui_lab_cli::emit::Target::Yaml),
         ),
         Commands::Proto => proto::serve().await,
-        Commands::Trace { zip, replay } => commands::trace(&zip, replay),
+        Commands::Trace {
+            zip,
+            replay,
+            replay_input,
+        } => commands::trace(&zip, replay, replay_input),
     };
     std::process::exit(code);
 }

@@ -103,7 +103,7 @@ fn mouse_step(event: &tui_lab_input::MouseInput) -> Step {
         MouseAction::ScrollUp => format!("SCROLL_UP {x} {y}"),
         MouseAction::ScrollDown => format!("SCROLL_DOWN {x} {y}"),
     };
-    Step::Press(name)
+    Step::Press(tui_lab_protocol::PressFor::key(name))
 }
 
 /// Record `--command` to a suite at `out`, emitting `target` output.
@@ -270,15 +270,19 @@ pub fn run(
                 Key::Char(c) => type_run.push(c),
                 Key::Named(name) => {
                     flush_typing(&mut pending, &mut type_run);
-                    pending.push(Step::Press(name.to_string()));
+                    pending.push(Step::Press(tui_lab_protocol::PressFor::key(name)));
                 }
                 Key::Ctrl(c) => {
                     flush_typing(&mut pending, &mut type_run);
-                    pending.push(Step::Press(format!("CTRL+{c}")));
+                    pending.push(Step::Press(tui_lab_protocol::PressFor::key(format!(
+                        "CTRL+{c}"
+                    ))));
                 }
                 Key::Alt(c) => {
                     flush_typing(&mut pending, &mut type_run);
-                    pending.push(Step::Press(format!("ALT+{c}")));
+                    pending.push(Step::Press(tui_lab_protocol::PressFor::key(format!(
+                        "ALT+{c}"
+                    ))));
                 }
             }
         }
@@ -306,7 +310,7 @@ pub fn run(
         // Lone trailing ESC becomes an explicit press; anything else we
         // could never complete is counted, never silently kept.
         if carry == [0x1b] {
-            steps.push(Step::Press("ESC".to_string()));
+            steps.push(Step::Press(tui_lab_protocol::PressFor::key("ESC")));
         } else {
             dropped_bytes += carry.len();
         }
@@ -358,6 +362,7 @@ pub fn run(
         focus: false,
         attachments: Vec::new(),
         budgets: Default::default(),
+        timing: Default::default(),
     };
     match serde_yaml::to_string(&file) {
         Ok(yaml) => match std::fs::write(out, yaml) {
@@ -380,7 +385,9 @@ pub fn run(
 /// Move the typing buffer into a single `type` step.
 fn flush_typing(pending: &mut Vec<Step>, type_run: &mut String) {
     if !type_run.is_empty() {
-        pending.push(Step::Type(std::mem::take(type_run)));
+        pending.push(Step::Type(tui_lab_protocol::TypeFor::text(std::mem::take(
+            type_run,
+        ))));
     }
 }
 
@@ -391,7 +398,7 @@ fn coalesce_typing(steps: &mut Vec<Step>) {
     let mut merged: Vec<Step> = Vec::with_capacity(steps.len());
     for step in steps.drain(..) {
         match (merged.last_mut(), step) {
-            (Some(Step::Type(into)), Step::Type(more)) => into.push_str(&more),
+            (Some(Step::Type(into)), Step::Type(more)) => into.text.push_str(&more.text),
             (_, step) => merged.push(step),
         }
     }

@@ -30,17 +30,19 @@ Returns: `{ "session_id": "sess_123", "status": "running", "screen": "Welcome...
 
 ```json
 { "action": "press", "session_id": "sess_123", "key": "ENTER" }
+{ "action": "press", "session_id": "sess_123", "key": "ENTER", "delay_ms": 100 }
 ```
 
-Keys: `ENTER ESC TAB BACKTAB UP DOWN LEFT RIGHT HOME END PGUP PGDN INSERT DELETE F1..F12`, `CTRL+C`, `CTRL+D`, single chars, `ALT+x`. Case-insensitive aliases (`DOWN` = `Down`). Mouse: `"CLICK x y"`, `"RELEASE x y"`, `"SCROLL_UP/DOWN x y"` (1-based cells, gestures as separate steps).
+Keys: `ENTER ESC TAB BACKTAB UP DOWN LEFT RIGHT HOME END PGUP PGDN INSERT DELETE F1..F12`, `CTRL+C`, `CTRL+D`, single chars, `ALT+x`. Case-insensitive aliases (`DOWN` = `Down`). Mouse: `"CLICK x y"`, `"RELEASE x y"`, `"SCROLL_UP/DOWN x y"` (1-based cells, gestures as separate steps). Optional `delay_ms` pauses before the write hits the PTY (P5-E2; suite default from YAML `timing.input_delay`).
 
 ### type
 
 ```json
 { "action": "type", "session_id": "sess_123", "text": "hello" }
+{ "action": "type", "session_id": "sess_123", "text": "hello", "sensitive": false, "delay_ms": 50 }
 ```
 
-Types verbatim (no Enter appended unless `\r` included).
+Types verbatim (no Enter appended unless `\r` included). Optional `delay_ms` is the gap between characters (P5-E2; suite default from YAML `timing.key_delay`).
 
 ### wait_for_text
 

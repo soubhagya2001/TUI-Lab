@@ -156,8 +156,8 @@ fn timeout_ms(timeout: Option<std::time::Duration>) -> u64 {
 
 fn py_step(step: &Step) -> String {
     match step {
-        Step::Press(key) => format!("await tui.press({})", py_string(key)),
-        Step::Type(text) => format!("await tui.type({})", py_string(text)),
+        Step::Press(press) => format!("await tui.press({})", py_string(&press.key)),
+        Step::Type(typed) => format!("await tui.type({})", py_string(&typed.text)),
         Step::WaitForText(wait) => format!(
             "await tui.expect_text({}, timeout_ms={})",
             py_string(&wait.text),
@@ -178,8 +178,8 @@ fn py_step(step: &Step) -> String {
 
 fn js_step(step: &Step) -> String {
     match step {
-        Step::Press(key) => format!("await tui.press({});", js_string(key)),
-        Step::Type(text) => format!("await tui.type({});", js_string(text)),
+        Step::Press(press) => format!("await tui.press({});", js_string(&press.key)),
+        Step::Type(typed) => format!("await tui.type({});", js_string(&typed.text)),
         Step::WaitForText(wait) => format!(
             "await tui.expectText({}, {});",
             js_string(&wait.text),
@@ -200,8 +200,8 @@ fn js_step(step: &Step) -> String {
 
 fn rs_step(step: &Step) -> String {
     match step {
-        Step::Press(key) => format!("tui.press({}).await?;", rs_string(key)),
-        Step::Type(text) => format!("tui.type_text({}, false).await?;", rs_string(text)),
+        Step::Press(press) => format!("tui.press({}).await?;", rs_string(&press.key)),
+        Step::Type(typed) => format!("tui.type_text({}, false).await?;", rs_string(&typed.text)),
         Step::WaitForText(wait) => format!(
             "tui.expect_text({}, {}, false, None).await?;",
             rs_string(&wait.text),
@@ -232,8 +232,8 @@ mod tests {
                 regex: false,
                 timeout: None,
             }),
-            Step::Press("ENTER".to_string()),
-            Step::Type("ta\"ble".to_string()),
+            Step::Press(tui_lab_protocol::PressFor::key("ENTER")),
+            Step::Type(tui_lab_protocol::TypeFor::text("ta\"ble")),
             Step::Snapshot(SnapshotTake {
                 name: "s".to_string(),
                 mask: Vec::new(),
