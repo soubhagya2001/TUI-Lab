@@ -237,6 +237,8 @@ mod tests {
             Step::Snapshot(SnapshotTake {
                 name: "s".to_string(),
                 mask: Vec::new(),
+                styled: false,
+                graphics: false,
             }),
         ]
     }

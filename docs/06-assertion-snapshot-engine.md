@@ -74,14 +74,21 @@ RAM: 40%
 
 Detects: colors, bold/underline/reverse, cursor, Unicode width, box-drawing.
 
-Storage:
+**Graphics (Sixel) snapshot** — captured DCS payloads, compared exact after
+whitespace normalization (no tolerance: font-free rendering would flake
+across machines). The grid crate retains no graphics, so this is structural
+capture at feed time, not pixel rendering.
+
+Storage (`snapshot: { name, styled?, graphics? }` selects the mode):
 
 ```
 tests/
   snapshots/
     dashboard/
-      80x24.json
-      120x40.json
+      boot/
+        120x40.txt          # text (default)
+        120x40.cells.json   # styled: true
+        120x40.sixel.json   # graphics: true
 ```
 
 Compare rule: `Expected != Actual → fail` with unified diff + rendered actual.

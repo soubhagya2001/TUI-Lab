@@ -73,7 +73,7 @@ assertions:
 | `assert_text` / `expect` | `{ contains/not_contains/regex/exact_text/cursor/exit_code/not_crashed/screen_changed/timeout }` | Polls to `timeout`; see `06` |
 | `assert_region` | `{ x,y,width,height, contains }` | Cell-scoped; OOB names the grid size |
 | `assert_exit_code` / `exit_code` | `0` | Post-cleanup |
-| `snapshot` / `screenshot` | `{ name, mask? }` | Golden-file compare |
+| `snapshot` / `screenshot` | `{ name, mask?, styled?, graphics? }` | Golden-file compare (text default; styled = colors; graphics = Sixel) |
 | `wait_for_exit` | `{ timeout }` | For quit flows |
 
 Durations read as human strings: `500ms`, `3s`, `2m` (bare numbers mean milliseconds).

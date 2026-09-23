@@ -631,3 +631,43 @@ fn resize_matrix_runs_each_geometry() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn styled_snapshot_approves_then_matches() {
+    // P5-D1: styled snapshots approve size-scoped cell goldens, then match.
+    let dir = scratch("styled");
+    let suite = write(
+        &dir,
+        "styled.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: styled\napplication:\n  command: \"{}\"\nterminal:\n  width: 120\n  height: 40\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - snapshot:\n      name: boot\n      styled: true\n  - press: q\n",
+            fixture_bin()
+        ),
+    );
+    let first = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(first.status.code(), Some(1), "first run writes .new");
+    let new_path = dir
+        .join("tests")
+        .join("snapshots")
+        .join("styled")
+        .join("boot")
+        .join("120x40.cells.new");
+    assert!(new_path.is_file(), "size-scoped .new written");
+    let mut golden = new_path.clone();
+    // with_extension replaces only the final `.new`, keeping `.cells`.
+    golden.set_extension("json");
+    std::fs::rename(&new_path, &golden).expect("approve golden");
+    let second = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(second.status.success(), "approved golden matches");
+    let _ = std::fs::remove_dir_all(&dir);
+}

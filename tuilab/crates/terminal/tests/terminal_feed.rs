@@ -160,3 +160,21 @@ fn osc52_sets_clipboard_across_feeds() {
     // Visible grid unaffected by the OSC bytes.
     assert!(!emu.text().contains("aGksbG8="));
 }
+
+#[test]
+fn sixel_capture_keeps_graphics_ignores_other_dcs() {
+    // D1: Sixel DCS captured (split across feeds rejoined, whitespace
+    // normalized); non-Sixel DCS (XTGETTCAP reply) ignored.
+    let (mut emu, _) = harness(80, 24);
+    assert!(emu.sixels().is_empty());
+    emu.feed(b"\x1bP+q5442"); // XTGETTCAP reply: not graphics.
+    emu.feed(b"\x1b\\noise");
+    assert!(emu.sixels().is_empty());
+    emu.feed(b"text\x1bPq#0;2;0;0;0#1;2;100;100;0");
+    emu.feed(b"#1~~@@\x1b\\tail");
+    assert_eq!(emu.sixels().len(), 1);
+    assert_eq!(
+        emu.sixels()[0],
+        b"#0;2;0;0;0#1;2;100;100;0#1~~@@".as_slice()
+    );
+}

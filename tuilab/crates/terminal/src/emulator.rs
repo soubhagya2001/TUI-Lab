@@ -91,6 +91,10 @@ pub struct Emulator {
     clipboard: Option<String>,
     /// Partial OSC sequence carried across `feed` calls.
     osc_carry: Vec<u8>,
+    /// Captured Sixel payloads (normalized, in arrival order).
+    sixels: Vec<Vec<u8>>,
+    /// Partial DCS sequence carried across `feed` calls.
+    dcs_carry: Vec<u8>,
 }
 
 impl Emulator {
@@ -102,12 +106,15 @@ impl Emulator {
             processor: Processor::<StdSyncHandler>::new(),
             clipboard: None,
             osc_carry: Vec::new(),
+            sixels: Vec::new(),
+            dcs_carry: Vec::new(),
         }
     }
 
     /// Feed raw PTY output bytes into the grid.
     pub fn feed(&mut self, bytes: &[u8]) {
         self.scan_osc52(bytes);
+        self.scan_sixel(bytes);
         self.processor.advance(&mut self.term, bytes);
     }
 
@@ -115,7 +122,6 @@ impl Emulator {
     pub fn clipboard(&self) -> Option<&str> {
         self.clipboard.as_deref()
     }
-
     /// Scrollback history lines, oldest first (plain text per row).
     pub fn scrollback_lines(&self) -> Vec<String> {
         let grid = self.term.grid();
@@ -186,6 +192,72 @@ impl Emulator {
             }
             let drop_upto = start + PREFIX.len() + rel + term_len;
             self.osc_carry.drain(..drop_upto);
+        }
+    }
+
+    /// Captured Sixel payloads, normalized, in arrival order.
+    pub fn sixels(&self) -> &[Vec<u8>] {
+        &self.sixels
+    }
+
+    /// Sniff Sixel graphics (`ESC P … q … ESC\` DCS sequences).
+    ///
+    /// Only DCS blocks whose parameter section introduces Sixel (`q`) are
+    /// kept; other device-control strings (e.g. XTGETTCAP replies) pass
+    /// through ignored. Payloads normalize by stripping whitespace so
+    /// equivalent encodings compare equal. Partial blocks carry to the next
+    /// feed (bounded); the grid itself never sees graphics (the grid crate
+    /// has no Sixel support — this is structural capture, not rendering).
+    fn scan_sixel(&mut self, bytes: &[u8]) {
+        const PREFIX: &[u8] = b"\x1bP";
+        const CAP: usize = 1024 * 1024;
+        self.dcs_carry.extend_from_slice(bytes);
+        if self.dcs_carry.len() > CAP + 64 {
+            self.dcs_carry.drain(..self.dcs_carry.len() - CAP);
+        }
+        loop {
+            let start = match self
+                .dcs_carry
+                .windows(PREFIX.len())
+                .position(|w| w == PREFIX)
+            {
+                Some(pos) => pos,
+                None => {
+                    let len = self.dcs_carry.len();
+                    self.dcs_carry.drain(..len.saturating_sub(PREFIX.len() - 1));
+                    return;
+                }
+            };
+            let rest = &self.dcs_carry[start + PREFIX.len()..];
+            let end = rest
+                .windows(2)
+                .position(|w| w == b"\x1b\\")
+                .map(|p| (p, 2))
+                .or_else(|| rest.iter().position(|&b| b == 0x07).map(|p| (p, 1)));
+            let Some((rel, term_len)) = end else {
+                self.dcs_carry.drain(..start);
+                return;
+            };
+            let body = &rest[..rel];
+            // Sixel introducer: optional digit/; params, then `q`.
+            let params_end = body
+                .iter()
+                .position(|&b| !(b.is_ascii_digit() || b == b';'))
+                .unwrap_or(body.len());
+            if body.get(params_end) != Some(&b'q') {
+                // Not Sixel (e.g. XTGETTCAP reply) — drop through terminator.
+                self.dcs_carry
+                    .drain(..start + PREFIX.len() + rel + term_len);
+                continue;
+            }
+            let payload: Vec<u8> = body[params_end + 1..]
+                .iter()
+                .copied()
+                .filter(|&b| !b.is_ascii_whitespace())
+                .collect();
+            self.sixels.push(payload);
+            self.dcs_carry
+                .drain(..start + PREFIX.len() + rel + term_len);
         }
     }
 

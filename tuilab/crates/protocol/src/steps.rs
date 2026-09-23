@@ -239,9 +239,15 @@ pub struct RegionAssertion {
 pub struct SnapshotTake {
     /// Snapshot name.
     pub name: String,
-    /// Mask list (regex strings or region names).
+    /// Mask list (regex strings or region names; text snapshots only).
     #[serde(default)]
     pub mask: Vec<String>,
+    /// Compare styled cells (colors included) instead of plain text.
+    #[serde(default)]
+    pub styled: bool,
+    /// Compare captured Sixel graphics instead of text.
+    #[serde(default)]
+    pub graphics: bool,
 }
 
 /// `wait_for_exit` payload.

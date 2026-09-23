@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use tui_lab_snapshots::{
-    apply_masks, cells_from_json, cells_to_json, compare_text, compile_masks, save_text, CellData,
+    apply_masks, cells_from_json, cells_to_json, compare_cells, compare_sixels, compare_text,
+    compile_masks, load_cells, load_sixels, save_cells, save_sixels, save_text, CellData,
     CellSnapshot,
 };
 use tui_lab_terminal::StyledCell;
@@ -126,4 +127,70 @@ fn cells_round_trip_through_json() {
     let json = cells_to_json(&snapshot).expect("encode");
     let back = cells_from_json(&json).expect("decode");
     assert_eq!(snapshot, back);
+}
+
+fn cell(x: u16, y: u16, char: &str, fg: &str) -> CellData {
+    CellData {
+        x,
+        y,
+        char: char.to_string(),
+        fg: fg.to_string(),
+        bg: "black".to_string(),
+        bold: false,
+        underline: false,
+        reverse: false,
+    }
+}
+
+#[test]
+fn styled_goldens_round_trip_size_scoped() {
+    // D1: cells goldens live beside text goldens with size in the name.
+    let dir = std::env::temp_dir().join(format!("tuilab-cells-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let snapshot = CellSnapshot {
+        width: 80,
+        height: 24,
+        cells: vec![cell(0, 0, "A", "red")],
+    };
+    let path = save_cells(&dir, "dash", 80, 24, &snapshot).expect("save");
+    assert!(
+        path.ends_with("dash/80x24.cells.json")
+            || path.to_string_lossy().contains("80x24.cells.json")
+    );
+    let back = load_cells(&path).expect("load");
+    assert_eq!(snapshot, back);
+    // A color-only change is a diff (same text, different pixels).
+    let mut changed = snapshot.clone();
+    changed.cells[0].fg = "blue".to_string();
+    let outcome = compare_cells(&snapshot, &changed);
+    assert!(!outcome.equal);
+    assert!(outcome.diff.contains("(0,0)"), "{}", outcome.diff);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn sixels_compare_exact_normalized() {
+    // D1: whitespace-insensitive, otherwise byte-exact — no tolerance.
+    assert!(compare_sixels(&["a".to_string()], &["a".to_string()]).equal);
+    let diff = compare_sixels(&["a".to_string()], &["a".to_string(), "b".to_string()]);
+    assert!(!diff.equal);
+    assert!(
+        diff.diff.contains("1 image(s) != 2 image(s)"),
+        "{}",
+        diff.diff
+    );
+}
+
+#[test]
+fn sixel_goldens_round_trip() {
+    let dir = std::env::temp_dir().join(format!("tuilab-sixel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let payloads = vec![b"#0;2;0;0;0~~".to_vec()];
+    let path = save_sixels(&dir, "logo", 80, 24, &payloads).expect("save");
+    assert!(path.to_string_lossy().contains("80x24.sixel.json"));
+    let back = load_sixels(&path).expect("load");
+    assert_eq!(back, ["#0;2;0;0;0~~".to_string()]);
+    let outcome = compare_sixels(&back, &["#0;2;0;0;0~~".to_string()]);
+    assert!(outcome.equal);
+    let _ = std::fs::remove_dir_all(&dir);
 }

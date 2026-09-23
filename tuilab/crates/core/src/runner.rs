@@ -542,9 +542,7 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
                 },
             }
         }
-        Step::Snapshot(take) | Step::Screenshot(take) => {
-            snapshot_step(session, take.name.clone(), take.mask.clone())?
-        }
+        Step::Snapshot(take) | Step::Screenshot(take) => snapshot_step(session, take)?,
         Step::WaitForExit(wait) => {
             let start = Instant::now();
             let exited = loop {
@@ -580,16 +578,28 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
 /// C4: goldens live at the size-scoped store path
 /// (`<suite>/<name>/<WxH>.txt`), never the flat `<name>.txt` — different
 /// terminal sizes must not collide.
+///
+/// D1: `styled` compares per-cell attributes (colors included) via
+/// `<WxH>.cells.json`; `graphics` compares captured Sixel payloads via
+/// `<WxH>.sixel.json`. Masks apply to text snapshots only.
 fn snapshot_step(
     session: &mut Session<'_>,
-    name: String,
-    mask: Vec<String>,
+    take: &tui_lab_protocol::SnapshotTake,
 ) -> Result<StepOutcome> {
+    let name = take.name.clone();
     let screen = pump(session);
-    let masks = compile_masks(&mask).map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
     let dir = session.opts.snapshot_dir.join(&session.ctx.suite);
-    let (width, height) = session.emu.dims();
-    let golden = tui_lab_snapshots::text_golden_path(&dir, &name, width as u16, height as u16);
+    let (cols, rows) = session.emu.dims();
+    let (width, height) = (cols as u16, rows as u16);
+    if take.graphics {
+        return graphics_snapshot(session, &dir, &name, width, height, &take.mask);
+    }
+    if take.styled {
+        return styled_snapshot(session, &dir, &name, width, height, &take.mask);
+    }
+    let masks =
+        compile_masks(&take.mask).map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
+    let golden = tui_lab_snapshots::text_golden_path(&dir, &name, width, height);
     if !golden.exists() {
         let new_path = golden.with_extension("new");
         if let Some(parent) = new_path.parent() {
@@ -612,6 +622,120 @@ fn snapshot_step(
             format!("snapshot {name:?} matched")
         } else {
             format!("snapshot {name:?} differs:\n{}", outcome.diff)
+        },
+    })
+}
+
+/// Styled snapshot: per-cell attributes (colors included) via
+/// `<WxH>.cells.json`. Masks apply to text snapshots only.
+fn styled_snapshot(
+    session: &mut Session<'_>,
+    dir: &std::path::Path,
+    name: &str,
+    width: u16,
+    height: u16,
+    mask: &[String],
+) -> Result<StepOutcome> {
+    if !mask.is_empty() {
+        return Err(CoreError::Message(format!(
+            "{name}: masks apply to text snapshots only"
+        )));
+    }
+    let cells: Vec<tui_lab_snapshots::CellData> = session
+        .emu
+        .cells()
+        .into_iter()
+        .map(tui_lab_snapshots::CellData::from)
+        .collect();
+    let snapshot = tui_lab_snapshots::CellSnapshot {
+        width,
+        height,
+        cells,
+    };
+    let golden = tui_lab_snapshots::cells_golden_path(dir, name, width, height);
+    if !golden.exists() {
+        let json = tui_lab_snapshots::cells_to_json(&snapshot)
+            .map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
+        let new_path = golden.with_extension("new");
+        if let Some(parent) = new_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| CoreError::Message(e.to_string()))?;
+        }
+        std::fs::write(&new_path, &json).map_err(|e| CoreError::Message(e.to_string()))?;
+        return Ok(StepOutcome {
+            passed: false,
+            detail: format!(
+                "new golden written to {} — approve and re-run",
+                new_path.display()
+            ),
+        });
+    }
+    let expected = tui_lab_snapshots::load_cells(&golden)
+        .map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
+    let actual = tui_lab_snapshots::CellSnapshot {
+        width,
+        height,
+        cells: snapshot.cells,
+    };
+    let outcome = tui_lab_snapshots::compare_cells(&expected, &actual);
+    Ok(StepOutcome {
+        passed: outcome.equal,
+        detail: if outcome.equal {
+            format!("styled snapshot {name:?} matched")
+        } else {
+            format!("styled snapshot {name:?} differs:\n{}", outcome.diff)
+        },
+    })
+}
+
+/// Sixel snapshot: captured graphics payloads via `<WxH>.sixel.json`.
+/// Exact normalized equality — no tolerance theater (font-free rendering
+/// would flake across machines). Masks apply to text snapshots only.
+fn graphics_snapshot(
+    session: &mut Session<'_>,
+    dir: &std::path::Path,
+    name: &str,
+    width: u16,
+    height: u16,
+    mask: &[String],
+) -> Result<StepOutcome> {
+    if !mask.is_empty() {
+        return Err(CoreError::Message(format!(
+            "{name}: masks apply to text snapshots only"
+        )));
+    }
+    pump(session);
+    let sixels: Vec<String> = session
+        .emu
+        .sixels()
+        .iter()
+        .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        .collect();
+    let golden = tui_lab_snapshots::sixel_golden_path(dir, name, width, height);
+    if !golden.exists() {
+        let json = serde_json::to_string_pretty(&sixels)
+            .map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
+        let new_path = golden.with_extension("new");
+        if let Some(parent) = new_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| CoreError::Message(e.to_string()))?;
+        }
+        std::fs::write(&new_path, &json).map_err(|e| CoreError::Message(e.to_string()))?;
+        return Ok(StepOutcome {
+            passed: false,
+            detail: format!(
+                "new golden written to {} — approve and re-run",
+                new_path.display()
+            ),
+        });
+    }
+    let expected = tui_lab_snapshots::load_sixels(&golden)
+        .map_err(|e| CoreError::Message(format!("{name}: {e}")))?;
+    let outcome = tui_lab_snapshots::compare_sixels(&expected, &sixels);
+    Ok(StepOutcome {
+        passed: outcome.equal,
+        detail: if outcome.equal {
+            format!("graphics snapshot {name:?} matched")
+        } else {
+            format!("graphics snapshot {name:?} differs:\n{}", outcome.diff)
         },
     })
 }

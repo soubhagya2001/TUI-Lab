@@ -58,7 +58,10 @@ fn unknown_keys_are_errors_not_garbage() {
 #[test]
 fn hover_encodes_motion_without_button() {
     // C2: Cb=35 (no-button 3 + motion flag 32), M terminator.
-    assert_eq!(encode_key("HOVER 10 5"), Ok(b"\x1b[<35;10;5M".to_vec()));
+    assert_eq!(
+        encode_key("HOVER 10 5").expect("hover encodes"),
+        b"\x1b[<35;10;5M".to_vec()
+    );
     assert!(encode_key("HOVER 10").is_err());
 }
 

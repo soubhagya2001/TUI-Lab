@@ -251,6 +251,143 @@ pub fn cells_from_json(text: &str) -> Result<CellSnapshot> {
     serde_json::from_str(text).map_err(|e| SnapshotError::Message(format!("decode cells: {e}")))
 }
 
+/// Styled golden path: `<dir>/<name>/<WxH>.cells.json` (D1 — same
+/// size-scoping as text goldens so sizes never collide).
+pub fn cells_golden_path(dir: &Path, name: &str, width: u16, height: u16) -> PathBuf {
+    let mut path = text_golden_path(dir, name, width, height);
+    path.set_extension("cells.json");
+    path
+}
+
+/// Write a styled golden, creating parent directories.
+pub fn save_cells(
+    dir: &Path,
+    name: &str,
+    width: u16,
+    height: u16,
+    snapshot: &CellSnapshot,
+) -> Result<PathBuf> {
+    let path = cells_golden_path(dir, name, width, height);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| SnapshotError::Io(format!("create {}: {e}", parent.display())))?;
+    }
+    let text = cells_to_json(snapshot)?;
+    std::fs::write(&path, text)
+        .map_err(|e| SnapshotError::Io(format!("write {}: {e}", path.display())))?;
+    Ok(path)
+}
+
+/// Load a styled golden written by [`save_cells`].
+pub fn load_cells(path: &Path) -> Result<CellSnapshot> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| SnapshotError::Io(format!("read {}: {e}", path.display())))?;
+    cells_from_json(&text)
+}
+
+/// Compare styled snapshots: exact cell equality (colors included).
+/// The diff names the first mismatches (capped) for failure bundles.
+pub fn compare_cells(expected: &CellSnapshot, actual: &CellSnapshot) -> CompareOutcome {
+    if expected == actual {
+        return CompareOutcome {
+            equal: true,
+            diff: String::new(),
+        };
+    }
+    let mut diff = String::new();
+    if (expected.width, expected.height) != (actual.width, actual.height) {
+        diff.push_str(&format!(
+            "size {}x{} != {}x{}\n",
+            expected.width, expected.height, actual.width, actual.height
+        ));
+    }
+    let mut shown = 0;
+    for (want, got) in expected.cells.iter().zip(actual.cells.iter()) {
+        if want != got {
+            use std::fmt::Write as _;
+            let _ = write!(diff, "cell ({},{}) differs", want.x, want.y);
+            diff.push_str(&format!(": {want:?} vs {got:?}\n"));
+            shown += 1;
+            if shown >= 10 {
+                diff.push_str("… (truncated)\n");
+                break;
+            }
+        }
+    }
+    if expected.cells.len() != actual.cells.len() && shown == 0 {
+        diff.push_str(&format!(
+            "{} cells != {} cells\n",
+            expected.cells.len(),
+            actual.cells.len()
+        ));
+    }
+    CompareOutcome { equal: false, diff }
+}
+
+/// Sixel golden path: `<dir>/<name>/<WxH>.sixel.json` (payload array).
+pub fn sixel_golden_path(dir: &Path, name: &str, width: u16, height: u16) -> PathBuf {
+    let mut path = text_golden_path(dir, name, width, height);
+    path.set_extension("sixel.json");
+    path
+}
+
+/// Write a Sixel golden (payloads as strings — Sixel data is ASCII).
+pub fn save_sixels(
+    dir: &Path,
+    name: &str,
+    width: u16,
+    height: u16,
+    sixels: &[Vec<u8>],
+) -> Result<PathBuf> {
+    let path = sixel_golden_path(dir, name, width, height);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| SnapshotError::Io(format!("create {}: {e}", parent.display())))?;
+    }
+    let payloads: Vec<String> = sixels
+        .iter()
+        .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        .collect();
+    let text = serde_json::to_string_pretty(&payloads)
+        .map_err(|e| SnapshotError::Message(format!("encode sixels: {e}")))?;
+    std::fs::write(&path, text)
+        .map_err(|e| SnapshotError::Io(format!("write {}: {e}", path.display())))?;
+    Ok(path)
+}
+
+/// Load a Sixel golden written by [`save_sixels`].
+pub fn load_sixels(path: &Path) -> Result<Vec<String>> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| SnapshotError::Io(format!("read {}: {e}", path.display())))?;
+    serde_json::from_str(&text).map_err(|e| SnapshotError::Message(format!("decode sixels: {e}")))
+}
+
+/// Compare Sixel payloads: exact normalized equality (D1 — no tolerance
+/// theater; font-free rendering would flake across machines).
+pub fn compare_sixels(expected: &[String], actual: &[String]) -> CompareOutcome {
+    if expected == actual {
+        return CompareOutcome {
+            equal: true,
+            diff: String::new(),
+        };
+    }
+    CompareOutcome {
+        equal: false,
+        diff: format!(
+            "{} image(s) != {} image(s){}",
+            expected.len(),
+            actual.len(),
+            expected
+                .iter()
+                .zip(actual.iter())
+                .enumerate()
+                .find(|(_, (want, got))| want != got)
+                .map(|(i, _)| format!(" — first differs at image {i}"))
+                .unwrap_or_default(),
+        ),
+    }
+}
+
 impl From<tui_lab_terminal::StyledCell> for CellData {
     /// Map the grid-owned cell onto the golden format. Lossless by
     /// construction: every field has a counterpart.
