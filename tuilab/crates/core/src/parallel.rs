@@ -100,5 +100,6 @@ fn infra_failure(suite: String, error: &str) -> SuiteResult {
         },
         trace: Vec::new(),
         trace_truncated: false,
+        attachments: Vec::new(),
     }
 }

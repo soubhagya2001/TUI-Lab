@@ -53,3 +53,14 @@ pub fn load_json_all(path: &Path) -> Result<Vec<SuiteResult>> {
         .map_err(|e| ReporterError::Io(format!("read {}: {e}", path.display())))?;
     serde_json::from_str(&text).map_err(|e| ReporterError::Message(format!("decode results: {e}")))
 }
+
+/// Load `reports/history.jsonl` (one [`HistoryEntry`](tui_lab_core::HistoryEntry)
+/// per line); corrupt lines are skipped, a missing file reads empty.
+pub fn load_history(path: &Path) -> Vec<tui_lab_core::HistoryEntry> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| serde_json::from_str(line.trim()).ok())
+        .collect()
+}

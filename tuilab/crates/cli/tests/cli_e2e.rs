@@ -520,3 +520,90 @@ fn trace_replay_streams_raw_bytes() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn attachments_copied_and_listed() {
+    // P5-B2: declared files land under reports/attachments and are listed.
+    let dir = scratch("attachments");
+    std::fs::write(dir.join("app.log"), "line one\n").expect("log file");
+    let suite = write(
+        &dir,
+        "logged.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: logged\napplication:\n  command: \"{}\"\nattachments:\n  - app.log\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - press: q\nassertions:\n  - exit_code: 0\n",
+            fixture_bin()
+        ),
+    );
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "suite passes");
+    let copied = dir
+        .join("reports")
+        .join("attachments")
+        .join("logged")
+        .join("app.log");
+    assert!(copied.is_file(), "attachment copied");
+    let text = std::fs::read_to_string(dir.join("reports").join("results.json")).expect("results");
+    assert!(
+        text.contains("attachments/logged/app.log"),
+        "attachment listed"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn flaky_suite_surfaces_in_html_report() {
+    // P5-B2: mixed history for one suite name renders a flake section.
+    let dir = scratch("flakes");
+    let suite = write(
+        &dir,
+        "flaky.yaml",
+        &format!(
+            "schema: tui-lab/v1\nname: flaky\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - press: q\nassertions:\n  - exit_code: 0\n",
+            fixture_bin()
+        ),
+    );
+    for _ in 0..1 {
+        let output = Command::new(tuilab())
+            .arg("run")
+            .arg(&suite)
+            .current_dir(&dir)
+            .output()
+            .expect("run suite");
+        assert!(output.status.success());
+    }
+    // Rewrite the same suite name to fail, run again: history mixes.
+    std::fs::write(
+        &suite,
+        format!(
+            "schema: tui-lab/v1\nname: flaky\napplication:\n  command: \"{}\"\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n  - assert_text:\n      contains: \"no-such-screen\"\n  - press: q\n",
+            fixture_bin()
+        ),
+    )
+    .expect("rewrite suite");
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert_eq!(output.status.code(), Some(1));
+    let report = Command::new(tuilab())
+        .arg("report")
+        .arg("--format")
+        .arg("html")
+        .arg("--out")
+        .arg("index.html")
+        .current_dir(&dir)
+        .output()
+        .expect("render report");
+    assert!(report.status.success());
+    let html = std::fs::read_to_string(dir.join("index.html")).expect("html");
+    assert!(html.contains("Flaky suites"), "flake section renders");
+    assert!(html.contains("flaky"), "flake names the suite");
+    let _ = std::fs::remove_dir_all(&dir);
+}

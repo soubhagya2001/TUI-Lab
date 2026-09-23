@@ -263,6 +263,7 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         failure,
         trace: std::mem::take(&mut ctx.trace),
         trace_truncated: ctx.trace_truncated,
+        attachments: Vec::new(),
         terminal: TerminalInfo {
             width: file.terminal.width,
             height: file.terminal.height,

@@ -45,6 +45,10 @@ pub struct SuiteResult {
     /// True when byte capture hit the cap (replay is a prefix).
     #[serde(skip_serializing, default)]
     pub trace_truncated: bool,
+    /// Attached report files, relative to the reports dir
+    /// (`attachments/<suite>/<file>`).
+    #[serde(default)]
+    pub attachments: Vec<String>,
 }
 
 /// One raw PTY read with its run-relative timestamp (trace replay pacing).
@@ -96,6 +100,30 @@ pub struct FailureInfo {
 
 fn one_attempt() -> u32 {
     1
+}
+
+/// One suite-run line of `reports/history.jsonl` (flake tracking).
+///
+/// Shared shape: the CLI appends, the reporter summarizes. Unknown fields
+/// denied; additive fields get serde defaults like everything else here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryEntry {
+    /// Milliseconds since the Unix epoch.
+    pub ts: u64,
+    /// Suite name.
+    pub suite: String,
+    /// Whether the run passed.
+    pub passed: bool,
+    /// Whether the run was skipped.
+    #[serde(default)]
+    pub skipped: bool,
+    /// Attempts used.
+    #[serde(default = "one_attempt")]
+    pub attempts: u32,
+    /// Run duration in milliseconds.
+    #[serde(default)]
+    pub duration_ms: u64,
 }
 
 /// Terminal geometry + type for the run record.

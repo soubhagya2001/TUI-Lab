@@ -41,6 +41,10 @@ tuilab run tests/search.yaml --debug
 tuilab trace reports/traces/search-flow.zip
 tuilab trace reports/traces/search-flow.zip --replay
 
+# Extra report inputs: suite `attachments:` files copy to
+# reports/attachments/<suite>/; every run appends reports/history.jsonl
+# (flake tracking surfaced in HTML reports).
+
 # Step through a run interactively (Enter continues, q aborts; forces sequential)
 tuilab run tests/search.yaml --step
 

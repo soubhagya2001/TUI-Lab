@@ -201,6 +201,14 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
             Err(code) => return code,
         }
     }
+    // Declared attachments per suite (names unique in practice; first wins).
+    let mut declared: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (file, _) in &pairs {
+        declared
+            .entry(file.name.clone())
+            .or_insert_with(|| file.attachments.clone());
+    }
     let (run_list, mut ordered) = select_suites(pairs, tags);
     // `ordered` carries selection indices so reports reassemble in input
     // order even when retries land late.
@@ -306,8 +314,10 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
     }
 
     ordered.sort_by_key(|(index, _)| *index);
-    let results: Vec<SuiteResult> = ordered.into_iter().map(|(_, result)| result).collect();
+    let mut results: Vec<SuiteResult> = ordered.into_iter().map(|(_, result)| result).collect();
 
+    collect_attachments(&mut results, &declared);
+    append_history(&results);
     write_traces(&results, trace);
 
     let report_path = PathBuf::from(&config.report.json);
@@ -395,6 +405,7 @@ fn skipped_result(name: &str) -> SuiteResult {
         },
         trace: Vec::new(),
         trace_truncated: false,
+        attachments: Vec::new(),
     }
 }
 
@@ -526,6 +537,101 @@ fn print_debug(result: &SuiteResult) {
     }
 }
 
+/// Filename-safe suite name (shared by traces + attachments).
+fn safe_name(suite: &str) -> String {
+    suite
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Copy suite-declared attachments into `reports/attachments/<suite>/`,
+/// recording report-relative paths on each result. Paths resolve relative
+/// to the invocation dir; missing files warn and skip (never fail the run).
+fn collect_attachments(
+    results: &mut [SuiteResult],
+    declared: &std::collections::HashMap<String, Vec<String>>,
+) {
+    for result in results {
+        if result.skipped {
+            continue;
+        }
+        let Some(names) = declared.get(&result.suite) else {
+            continue;
+        };
+        let safe = safe_name(&result.suite);
+        for name in names {
+            let src = Path::new(name);
+            let Some(file_name) = src.file_name() else {
+                eprintln!("warning: attachment has no file name: {name}");
+                continue;
+            };
+            let dest = PathBuf::from("reports/attachments")
+                .join(&safe)
+                .join(file_name);
+            if let Some(parent) = dest.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("warning: attachment dir {}: {e}", parent.display());
+                    continue;
+                }
+            }
+            match std::fs::copy(src, &dest) {
+                Ok(_) => result.attachments.push(format!(
+                    "attachments/{safe}/{}",
+                    file_name.to_string_lossy()
+                )),
+                Err(e) => eprintln!("warning: attachment {name}: {e}"),
+            }
+        }
+    }
+}
+
+/// Append one history line per suite to `reports/history.jsonl` (flake
+/// tracking). Never fails the run.
+fn append_history(results: &[SuiteResult]) {
+    use std::io::Write as _;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let mut buf = String::new();
+    for result in results {
+        buf.push_str(
+            &serde_json::json!({
+                "ts": now,
+                "suite": result.suite,
+                "passed": result.passed,
+                "skipped": result.skipped,
+                "attempts": result.attempts,
+                "duration_ms": result.duration_ms,
+            })
+            .to_string(),
+        );
+        buf.push('\n');
+    }
+    if let Err(e) = (|| -> std::io::Result<()> {
+        let path = PathBuf::from("reports/history.jsonl");
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        file.write_all(buf.as_bytes())
+    })() {
+        eprintln!("warning: history append: {e}");
+    }
+}
+
 /// Write `reports/traces/<suite>.zip` for failed suites — or every suite
 /// with `--trace always` (`never` disables). Skipped suites have no run.
 fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
@@ -537,17 +643,7 @@ fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
         if result.skipped || (result.passed && !always) {
             continue;
         }
-        let safe: String = result
-            .suite
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
+        let safe = safe_name(&result.suite);
         let path = PathBuf::from("reports/traces").join(format!("{safe}.zip"));
         match write_trace(&path, result) {
             Ok(()) => eprintln!("trace: {}", path.display()),
@@ -585,14 +681,6 @@ pub fn trace(zip: &Path, replay: bool) -> i32 {
 
 /// Re-render stored JSON results as JUnit or self-contained HTML.
 pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
-    let render: fn(&[tui_lab_core::SuiteResult]) -> String = match format {
-        "junit" => tui_lab_reporter::to_junit_all,
-        "html" => tui_lab_reporter::to_html,
-        _ => {
-            eprintln!("--format {format}: expected junit or html");
-            return EXIT_CONFIG_ERROR;
-        }
-    };
     let results = match load_json_all(results_path) {
         Ok(results) => results,
         Err(e) => {
@@ -600,6 +688,23 @@ pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
             return EXIT_CONFIG_ERROR;
         }
     };
+    // Flake history lives next to the results file (B2); absent history
+    // simply renders no flake section.
+    let history_path = results_path
+        .parent()
+        .map(|parent| parent.join("history.jsonl"))
+        .unwrap_or_else(|| PathBuf::from("history.jsonl"));
+    let flakes =
+        tui_lab_reporter::summarize_flakes(&tui_lab_reporter::load_history(&history_path), 30);
+    let render: fn(&[tui_lab_core::SuiteResult], &[tui_lab_reporter::FlakeSummary]) -> String =
+        match format {
+            "junit" => |results, _| tui_lab_reporter::to_junit_all(results),
+            "html" => tui_lab_reporter::to_html_with_flakes,
+            _ => {
+                eprintln!("--format {format}: expected junit or html");
+                return EXIT_CONFIG_ERROR;
+            }
+        };
     if let Some(parent) = out.parent() {
         if !parent.as_os_str().is_empty() {
             if let Err(e) = std::fs::create_dir_all(parent) {
@@ -608,7 +713,7 @@ pub fn report(format: &str, out: &Path, results_path: &Path) -> i32 {
             }
         }
     }
-    match std::fs::write(out, render(&results)) {
+    match std::fs::write(out, render(&results, &flakes)) {
         Ok(()) => {
             println!("wrote {}", out.display());
             EXIT_OK

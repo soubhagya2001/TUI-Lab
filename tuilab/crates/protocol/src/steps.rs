@@ -49,6 +49,10 @@ pub struct TestFile {
     /// suites run.
     #[serde(default)]
     pub focus: bool,
+    /// Extra files attached to the report (`reports/attachments/<suite>/`).
+    /// Paths resolve relative to the suite file.
+    #[serde(default)]
+    pub attachments: Vec<String>,
 }
 
 impl TestFile {

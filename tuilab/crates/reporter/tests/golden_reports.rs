@@ -49,6 +49,7 @@ fn fixture_result() -> SuiteResult {
         },
         trace: Vec::new(),
         trace_truncated: false,
+        attachments: Vec::new(),
     }
 }
 
@@ -178,4 +179,78 @@ fn pre_9c_results_without_exit_code_still_parse() {
     });
     let result: SuiteResult = serde_json::from_value(old).expect("old shape parses");
     assert_eq!(result.exit_code, None);
+}
+
+#[test]
+fn html_waterfall_and_attachments_render() {
+    use tui_lab_reporter::{to_html_with_flakes, FlakeSummary};
+    let mut result = fixture_result();
+    result.attachments = vec!["attachments/smoke/app.log".to_string()];
+    let html = to_html_with_flakes(
+        &[result],
+        &[FlakeSummary {
+            suite: "smoke & <mirrors>".to_string(),
+            passed: 1,
+            total: 3,
+        }],
+    );
+    assert!(html.contains("class=\"tl\""), "waterfall timeline");
+    assert!(
+        html.contains("attachments/smoke/app.log"),
+        "attachment link"
+    );
+    assert!(html.contains("Flaky suites"), "flake section");
+    assert!(html.contains("1/3 recent runs passed"), "flake counts");
+}
+
+#[test]
+fn flake_summary_needs_mixed_outcomes() {
+    use tui_lab_core::HistoryEntry;
+    use tui_lab_reporter::summarize_flakes;
+    let history = vec![
+        HistoryEntry {
+            ts: 1,
+            suite: "steady".into(),
+            passed: true,
+            skipped: false,
+            attempts: 1,
+            duration_ms: 10,
+        },
+        HistoryEntry {
+            ts: 2,
+            suite: "steady".into(),
+            passed: true,
+            skipped: false,
+            attempts: 1,
+            duration_ms: 10,
+        },
+        HistoryEntry {
+            ts: 3,
+            suite: "flaky".into(),
+            passed: true,
+            skipped: false,
+            attempts: 1,
+            duration_ms: 10,
+        },
+        HistoryEntry {
+            ts: 4,
+            suite: "flaky".into(),
+            passed: false,
+            skipped: false,
+            attempts: 2,
+            duration_ms: 10,
+        },
+        HistoryEntry {
+            ts: 5,
+            suite: "skipped".into(),
+            passed: true,
+            skipped: true,
+            attempts: 1,
+            duration_ms: 0,
+        },
+    ];
+    let flakes = summarize_flakes(&history, 30);
+    assert_eq!(flakes.len(), 1);
+    assert_eq!(flakes[0].suite, "flaky");
+    assert_eq!((flakes[0].passed, flakes[0].total), (1, 2));
 }

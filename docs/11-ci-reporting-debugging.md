@@ -31,6 +31,10 @@ reports stay diffable run-over-run.
 *   `reports/results.json` — full step trace, timings, screens.
 *   `reports/junit.xml` — CI-native pass/fail.
 *   `reports/index.html` — self-contained step timeline with screens and diffs (inline CSS, no external assets).
+*   HTML extras: per-step waterfall bars (from `started_ms`), attachment
+    links (`attachments/<suite>/<file>`), and a flaky-suites header computed
+    from `reports/history.jsonl` (one line per suite per run; mixed recent
+    outcomes flag a flake).
 
 ## 11.3 Failure bundle (capture on every failure)
 
