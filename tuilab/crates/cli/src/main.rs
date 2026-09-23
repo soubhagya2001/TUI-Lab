@@ -48,6 +48,9 @@ enum Commands {
         /// disables; absent keeps retain-on-failure.
         #[arg(long, value_parser = ["always", "never"])]
         trace: Option<String>,
+        /// Run every suite once per geometry, e.g. `80x24,120x40`.
+        #[arg(long, value_delimiter = ',', value_parser = parse_terminal)]
+        resize_matrix: Vec<(u16, u16)>,
     },
     /// Re-render stored results (junit for now).
     Report {
@@ -121,6 +124,7 @@ async fn main() {
             retries,
             tags,
             trace,
+            resize_matrix,
         } => {
             commands::run(commands::RunArgs {
                 path: path.as_deref(),
@@ -132,6 +136,7 @@ async fn main() {
                 retries,
                 tags: &tags,
                 trace: trace.as_deref(),
+                resize_matrix: &resize_matrix,
             })
             .await
         }

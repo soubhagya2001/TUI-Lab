@@ -72,11 +72,14 @@ pub struct Cell {
 Example: output `"Hello" + ESC[2;5H + "World"` →
 row 0: `Hello`, row 1 col 4: `World`. Tests inspect this grid, not raw bytes.
 
+Scrollback history stays searchable (`scrollback_lines`, `find_scrollback`);
+OSC 52 clipboard sets are captured (`clipboard()`, base64 as sent).
+
 ## 3.3 Input injection
 
 *   Printable chars → bytes (UTF-8)
 *   Named keys → escape sequences: `ENTER (\r)`, `ESC`, `UP/DOWN/LEFT/RIGHT`, `TAB/BACKTAB`, `HOME/END/PGUP/PGDN/INSERT/DELETE`, `F1-F12`, `CTRL+C/A/...`, `ALT+x`
-*   Mouse (Phase 9b): SGR press/scroll/release as named keys — `CLICK x y`, `RIGHT_CLICK x y`, `SCROLL_UP/DOWN x y`, `RELEASE x y` (1-based cells). Gestures travel as separate writes (press, then release); see ConPTY rules below.
+*   Mouse (Phase 9b): SGR press/scroll/release as named keys — `CLICK x y`, `RIGHT_CLICK x y`, `SCROLL_UP/DOWN x y`, `RELEASE x y`, `HOVER x y` (1-based cells). Gestures travel as separate writes (press, then release); see ConPTY rules below.
 *   Resize: `pty.resize(cols, rows)` + optional `SIGWINCH` propagation
 *   Paste: bracketed-paste wrap when enabled
 

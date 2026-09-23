@@ -94,8 +94,8 @@ fn alt(rest: &str) -> Result<Vec<u8>> {
 }
 
 /// Mouse actions: `CLICK x y`, `RIGHT_CLICK x y`, `SCROLL_UP x y`,
-/// `SCROLL_DOWN x y`, `RELEASE x y` (1-based cells). `None` means "not
-/// a mouse name" so others fall through.
+/// `SCROLL_DOWN x y`, `RELEASE x y`, `HOVER x y` (1-based cells). `None`
+/// means "not a mouse name" so others fall through.
 ///
 /// There is deliberately no single-blob `DRAG`: streaming parsers
 /// (crossterm included) reject glued escape sequences, so gestures are
@@ -103,7 +103,7 @@ fn alt(rest: &str) -> Result<Vec<u8>> {
 /// arrive. See `mouse_drag` for the byte shapes this composes.
 fn mouse(normalized: &str) -> Option<Result<Vec<u8>>> {
     use crate::mouse::{
-        mouse_press, mouse_release, mouse_scroll_down, mouse_scroll_up, MouseButton,
+        mouse_hover, mouse_press, mouse_release, mouse_scroll_down, mouse_scroll_up, MouseButton,
     };
     let mut parts = normalized.split_whitespace();
     let kind = parts.next()?;
@@ -115,9 +115,9 @@ fn mouse(normalized: &str) -> Option<Result<Vec<u8>>> {
             Err(_) => {
                 return match kind {
                     "CLICK" | "RIGHT_CLICK" | "MIDDLE_CLICK" | "RELEASE" | "SCROLL_UP"
-                    | "SCROLL_DOWN" | "DRAG" => Some(Err(InputError::UnknownKey(format!(
-                        "{normalized}: coordinates must be integers"
-                    )))),
+                    | "SCROLL_DOWN" | "HOVER" | "DRAG" => Some(Err(InputError::UnknownKey(
+                        format!("{normalized}: coordinates must be integers"),
+                    ))),
                     _ => None,
                 };
             }
@@ -135,7 +135,12 @@ fn mouse(normalized: &str) -> Option<Result<Vec<u8>>> {
         ("RELEASE", 2) => mouse_release(MouseButton::Left, at(0), at(1)),
         ("SCROLL_UP", 2) => mouse_scroll_up(at(0), at(1)),
         ("SCROLL_DOWN", 2) => mouse_scroll_down(at(0), at(1)),
-        ("CLICK" | "RIGHT_CLICK" | "MIDDLE_CLICK" | "RELEASE" | "SCROLL_UP" | "SCROLL_DOWN", _) => {
+        ("HOVER", 2) => mouse_hover(at(0), at(1)),
+        (
+            "CLICK" | "RIGHT_CLICK" | "MIDDLE_CLICK" | "RELEASE" | "SCROLL_UP" | "SCROLL_DOWN"
+            | "HOVER",
+            _,
+        ) => {
             return Some(Err(shape("2 coordinates: e.g. CLICK 10 5")));
         }
         _ => return None,

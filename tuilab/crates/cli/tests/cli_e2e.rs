@@ -607,3 +607,27 @@ fn flaky_suite_surfaces_in_html_report() {
     assert!(html.contains("flaky"), "flake names the suite");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn resize_matrix_runs_each_geometry() {
+    // P5-C2: one suite × two geometries = two suffixed results, both green.
+    let dir = scratch("matrix");
+    let suite = write(&dir, "green.yaml", &green_suite(&fixture_bin()));
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .arg("--resize-matrix")
+        .arg("80x24,120x40")
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "matrix passes");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("2 passed, 0 failed"), "stdout:\n{stdout}");
+    let text = std::fs::read_to_string(dir.join("reports").join("results.json")).expect("results");
+    assert!(
+        text.contains("@80x24") && text.contains("@120x40"),
+        "suffixed names"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -54,7 +54,17 @@ pub fn mouse_scroll_up(x: u16, y: u16) -> Vec<u8> {
 
 /// Wheel-down tick at 1-based `(x, y)` (`Cb = 65`).
 pub fn mouse_scroll_down(x: u16, y: u16) -> Vec<u8> {
-    sgr(65, x, y, false)
+    sgr(64 + 1, x, y, false)
+}
+
+/// Hover (motion with no button down) at 1-based `(x, y)`.
+///
+/// Encoded as `Cb = 35` (`3` no-button + `32` motion flag) with `M`.
+/// Terminals only report these with any-motion tracking (1003); plain
+/// click tracking (1000) stays silent, so hover steps never appear
+/// spuriously in recordings.
+pub fn mouse_hover(x: u16, y: u16) -> Vec<u8> {
+    sgr(35, x, y, false)
 }
 
 /// A decoded incoming mouse action (what the user's terminal sends while

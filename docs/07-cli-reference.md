@@ -24,6 +24,9 @@ tuilab run tests/ --tags smoke
 tuilab run tests/ --shard 1/3
 tuilab run tests/ --retries 2
 
+# Resize matrix: every suite once per geometry (names suffixed @WxH)
+tuilab run tests/ --resize-matrix 80x24,120x40
+
 # Interactive recording (drives the app, emits YAML with smart waits)
 tuilab record --command "./codegraph" --out tests/codegen.yaml
 # --target python|js|rust emits SDK code; clicks synthesize CLICK steps

@@ -145,6 +145,8 @@ pub struct RunArgs<'a> {
     /// Trace capture: `Some("always")` writes a trace.zip per suite,
     /// `Some("never")` disables; `None` keeps retain-on-failure.
     pub trace: Option<&'a str>,
+    /// Run every suite once per geometry (empty = run as declared).
+    pub resize_matrix: &'a [(u16, u16)],
 }
 
 /// Run suites (sequentially or in parallel); returns the CLI exit code.
@@ -164,6 +166,7 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
         retries,
         tags,
         trace,
+        resize_matrix,
     } = args;
     if step_mode {
         eprintln!("step mode: Enter continues each step, q aborts the run");
@@ -221,6 +224,9 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
         if run_list.is_empty() {
             eprintln!("no suites in shard {n}/{m}");
         }
+    }
+    if !resize_matrix.is_empty() {
+        run_list = expand_matrix(run_list, resize_matrix);
     }
 
     let mut exit = EXIT_OK;
@@ -382,6 +388,28 @@ fn apply_shard(run: Vec<IndexedSuite>, n: usize, m: usize) -> Vec<IndexedSuite> 
         .filter(|(i, _)| i % m == n - 1)
         .map(|(_, pair)| pair)
         .collect()
+}
+
+/// Expand every suite once per matrix geometry (C2).
+///
+/// Suite-major order (all geometries of suite A before suite B), fresh
+/// selection indices, names suffixed ` @WxH` so reports stay distinct.
+fn expand_matrix(run: Vec<IndexedSuite>, matrix: &[(u16, u16)]) -> Vec<IndexedSuite> {
+    if matrix.is_empty() {
+        return run;
+    }
+    let mut out = Vec::with_capacity(run.len() * matrix.len());
+    for (_, file, opts) in run {
+        for (width, height) in matrix {
+            let mut file = file.clone();
+            file.terminal.width = *width;
+            file.terminal.height = *height;
+            file.name = format!("{} @{width}x{height}", file.name);
+            let index = out.len();
+            out.push((index, file, opts.clone()));
+        }
+    }
+    out
 }
 
 /// A passing-but-skipped result so reports stay complete.
@@ -895,5 +923,30 @@ mod tests {
         assert_eq!(first.len() + second.len(), 3);
         // Selection indices survive sharding (reports stay ordered).
         assert!(first.iter().chain(second.iter()).all(|(i, _, _)| *i < 3));
+    }
+
+    /// C2: matrix expansion is suite-major with fresh indices and suffixed names.
+    #[test]
+    fn matrix_expands_per_geometry() {
+        let loaded: Vec<LoadedSuite> = ["a", "b"]
+            .iter()
+            .map(|name| suite(name, &[], false, false))
+            .collect();
+        let (run, _) = select_suites(loaded, &[]);
+        let expanded = expand_matrix(run, &[(80, 24), (120, 40)]);
+        assert_eq!(expanded.len(), 4);
+        let names: Vec<&str> = expanded.iter().map(|(_, f, _)| f.name.as_str()).collect();
+        assert_eq!(names, ["a @80x24", "a @120x40", "b @80x24", "b @120x40"]);
+        assert_eq!(expanded[0].1.terminal.width, 80);
+        assert_eq!(expanded[1].1.terminal.height, 40);
+        let indices: Vec<usize> = expanded.iter().map(|(i, _, _)| *i).collect();
+        assert_eq!(indices, [0, 1, 2, 3]);
+        // Empty matrix is a no-op.
+        let loaded: Vec<LoadedSuite> = ["a"]
+            .iter()
+            .map(|name| suite(name, &[], false, false))
+            .collect();
+        let (run, _) = select_suites(loaded, &[]);
+        assert_eq!(expand_matrix(run, &[]).len(), 1);
     }
 }

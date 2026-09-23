@@ -133,3 +133,30 @@ fn region_text_counts_cells_and_names_oob_bounds() {
     let err = emu.region_text(0, 5, 1, 1).expect_err("rows OOB");
     assert!(err.contains("20x5"), "{err}");
 }
+
+#[test]
+fn scrollback_search_finds_scrolled_off_lines() {
+    // C2: lines scrolled past the viewport stay searchable.
+    let (mut emu, _) = harness(20, 4);
+    for i in 0..10 {
+        emu.feed(format!("line-{i:02}\r\n").as_bytes());
+    }
+    let history = emu.scrollback_lines();
+    assert!(!history.is_empty(), "overflow reaches history");
+    assert!(history.iter().any(|line| line.contains("line-00")));
+    assert_eq!(emu.find_scrollback("line-00"), Some(0));
+    assert_eq!(emu.find_scrollback("no-such-line"), None);
+}
+
+#[test]
+fn osc52_sets_clipboard_across_feeds() {
+    // C2: clipboard payload captured, split sequences rejoined.
+    let (mut emu, _) = harness(80, 24);
+    assert_eq!(emu.clipboard(), None);
+    emu.feed(b"\x1b]52;c;aGk");
+    assert_eq!(emu.clipboard(), None, "partial held");
+    emu.feed(b"sbG8=\x07rest");
+    assert_eq!(emu.clipboard(), Some("aGksbG8="));
+    // Visible grid unaffected by the OSC bytes.
+    assert!(!emu.text().contains("aGksbG8="));
+}
