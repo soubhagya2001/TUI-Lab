@@ -9,6 +9,6 @@ pub mod utils;
 
 pub use actions::Action;
 pub use steps::{
-    parse_duration, Application, RegionAssertion, ResizeTo, SleepFor, SnapshotTake, Step,
+    parse_duration, Application, Budgets, RegionAssertion, ResizeTo, SleepFor, SnapshotTake, Step,
     SuiteAssertion, TerminalConfig, TestFile, TextAssertion, WaitForExit, WaitForText,
 };

@@ -12,6 +12,25 @@ use crate::constants::SCHEMA_ID;
 use crate::error::{ProtocolError, Result};
 use crate::utils::is_supported_schema;
 
+/// Performance budgets (P5-D2).
+///
+/// All optional; absent budgets never fail. Violations are ordinary step
+/// failures with evidence (not infra errors): a slow suite is a test
+/// result, not a broken harness.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Budgets {
+    /// Every step must complete within this (e.g. `2s`).
+    #[serde(default, with = "humantime_opt")]
+    pub step: Option<Duration>,
+    /// The whole run must complete within this.
+    #[serde(default, with = "humantime_opt")]
+    pub suite: Option<Duration>,
+    /// Spawn-to-first-content must complete within this.
+    #[serde(default, with = "humantime_opt")]
+    pub startup: Option<Duration>,
+}
+
 /// Top-level test file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,6 +72,9 @@ pub struct TestFile {
     /// Paths resolve relative to the suite file.
     #[serde(default)]
     pub attachments: Vec<String>,
+    /// Performance budgets (all optional; absent budgets never fail).
+    #[serde(default)]
+    pub budgets: Budgets,
 }
 
 impl TestFile {

@@ -396,3 +396,93 @@ steps:
         failure.expected
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn step_budget_fails_slow_steps() {
+    // D2: a 1ms step budget fails even passing steps, with evidence.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: budgeted-step
+application:
+  command: "{}"
+budgets:
+  step: 1ms
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed, "over-budget step must fail");
+    let failure = result.failure.expect("failure recorded");
+    assert!(
+        failure.expected.contains("budget exceeded"),
+        "{}",
+        failure.expected
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn suite_budget_fails_long_runs() {
+    // D2: a 1ms suite budget fails the run as a test result (not infra).
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: budgeted-suite
+application:
+  command: "{}"
+budgets:
+  suite: 1ms
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed);
+    let failure = result.failure.expect("failure recorded");
+    assert_eq!(failure.step, "budget");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn startup_budget_fails_blank_boots() {
+    // D2: a command that never paints fails the startup budget (no steps run).
+    #[cfg(windows)]
+    let (command, args) = (
+        "powershell".to_string(),
+        vec![
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            "Start-Sleep 5".to_string(),
+        ],
+    );
+    #[cfg(not(windows))]
+    let (command, args) = ("sleep".to_string(), vec!["5".to_string()]);
+    // Split command + args portably.
+    let args_yaml = args
+        .iter()
+        .map(|arg| format!("    - \"{arg}\"\n"))
+        .collect::<String>();
+    let file = TestFile::from_yaml(&format!(
+        "schema: tui-lab/v1\nname: budgeted-startup\napplication:\n  command: \"{command}\"\n  args:\n{args_yaml}budgets:\n  startup: 500ms\nsteps:\n  - wait_for_text:\n      text: \"TUI-LAB-SAMPLE\"\n",
+    ))
+    .expect("parse");
+    let started = std::time::Instant::now();
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(!result.passed);
+    assert!(result.steps.is_empty(), "no steps ran");
+    let failure = result.failure.expect("failure recorded");
+    assert_eq!(failure.step, "startup");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "budget bounds the wait, took {:?}",
+        started.elapsed()
+    );
+}

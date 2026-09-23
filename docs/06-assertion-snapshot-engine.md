@@ -119,3 +119,16 @@ Also support: `ignore_ansi_style: true`, per-cell `ignore_fg/bg`, custom normali
     failures; tight defaults flaked on loaded CI (Phase 6).
 *   Anti-pattern: `press ENTER` → immediate `assert`. Correct: `press ENTER` → `wait_for_text`.
 *   On timeout: return last screen + elapsed + step index (feeds failure bundle in `11`).
+
+## 6.5 Performance budgets (opt-in)
+
+```yaml
+budgets:
+  step: 2s      # every step must complete within this
+  suite: 60s    # the whole run must complete within this
+  startup: 3s   # spawn-to-first-content must complete within this
+```
+
+Absent budgets never fail. Violations are ordinary test failures with
+evidence — a slow suite is a result, not a broken harness (unlike
+`terminal.timeout`, which kills hung runs as infra errors).

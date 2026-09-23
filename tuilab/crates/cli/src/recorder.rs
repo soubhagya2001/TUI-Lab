@@ -357,6 +357,7 @@ pub fn run(
         skip: false,
         focus: false,
         attachments: Vec::new(),
+        budgets: Default::default(),
     };
     match serde_yaml::to_string(&file) {
         Ok(yaml) => match std::fs::write(out, yaml) {

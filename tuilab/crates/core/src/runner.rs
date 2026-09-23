@@ -134,6 +134,52 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
         pty.writer_sink(),
     );
 
+    // D2: startup budget measures spawn-to-first-content. Skipped entirely
+    // when unset (zero behavior change for unbudgeted suites).
+    if let Some(budget) = file.budgets.startup {
+        let boot = Instant::now();
+        let content = loop {
+            let chunk = pty.poll(Duration::from_millis(50));
+            emu.feed(&chunk);
+            if !emu.text().trim().is_empty() {
+                break true;
+            }
+            if boot.elapsed() >= budget {
+                break false;
+            }
+        };
+        if !content {
+            return Ok(SuiteResult {
+                schema: TestFile::schema_id().to_string(),
+                suite: file.name.clone(),
+                passed: false,
+                skipped: false,
+                attempts: 1,
+                exit_success: None,
+                exit_signal: None,
+                exit_code: None,
+                duration_ms: ctx.elapsed_ms(),
+                steps: Vec::new(),
+                failure: Some(FailureInfo {
+                    step_index: 0,
+                    step: "startup".to_string(),
+                    expected: format!("content within {budget:?}"),
+                    actual: "blank screen".to_string(),
+                    last_screen: emu.text(),
+                    input_history: Vec::new(),
+                }),
+                terminal: TerminalInfo {
+                    width: file.terminal.width,
+                    height: file.terminal.height,
+                    term: opts.term.clone(),
+                },
+                trace: Vec::new(),
+                trace_truncated: false,
+                attachments: Vec::new(),
+            });
+        }
+    }
+
     let all_phases = [&file.setup[..], &file.steps[..]];
     let mut aborted = false;
     for steps in all_phases {
@@ -154,6 +200,18 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                 step,
             )
             .await?;
+            let mut outcome = outcome;
+            // D2: step budgets fail slow-but-passing steps (failures keep
+            // their original, more informative detail).
+            if let Some(budget) = file.budgets.step {
+                let took = step_started.elapsed();
+                if outcome.passed && took > budget {
+                    outcome = StepOutcome {
+                        passed: false,
+                        detail: format!("budget exceeded: step took {took:?} (budget {budget:?})"),
+                    };
+                }
+            }
             let passed = outcome.passed;
             results.push(StepResult {
                 index: ctx.step_index,
@@ -197,6 +255,17 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
             step,
         )
         .await?;
+        let mut outcome = outcome;
+        // D2: step budgets apply to cleanup steps too.
+        if let Some(budget) = file.budgets.step {
+            let took = step_started.elapsed();
+            if outcome.passed && took > budget {
+                outcome = StepOutcome {
+                    passed: false,
+                    detail: format!("budget exceeded: step took {took:?} (budget {budget:?})"),
+                };
+            }
+        }
         results.push(StepResult {
             index: ctx.step_index,
             kind: format!("cleanup: {}", describe(step)),
@@ -246,6 +315,24 @@ pub async fn run_file(file: &TestFile, opts: &RunOptions) -> Result<SuiteResult>
                     }));
                 }
             }
+        }
+    }
+
+    // D2: suite budget is a test failure with evidence (not an infra
+    // error like `terminal.timeout`). Only applies while still passing —
+    // the first failure already tells the story.
+    if let Some(budget) = file.budgets.suite {
+        let took = ctx.started_at.elapsed();
+        if passed && took > budget {
+            passed = false;
+            failure = Some(FailureInfo {
+                step_index: results.len(),
+                step: "budget".to_string(),
+                expected: format!("run within {budget:?}"),
+                actual: format!("run took {took:?}"),
+                last_screen: emu.text(),
+                input_history: ctx.input_history.clone(),
+            });
         }
     }
 
