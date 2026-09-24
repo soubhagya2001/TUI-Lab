@@ -55,6 +55,26 @@ pub struct PtySession {
     output_rx: mpsc::Receiver<Vec<u8>>,
     writer: SharedWriter,
     stats: Arc<PumpStats>,
+    /// Set once [`PtySession::close`] has reaped the child, so [`Drop`]
+    /// skips a pointless kill on an already-dead handle.
+    closed: bool,
+}
+
+impl Drop for PtySession {
+    /// K4 safety net: dropping a session must never orphan the child.
+    ///
+    /// The explicit [`PtySession::close`] path stays the graceful one
+    /// (quit bytes, bounded wait, then kill). This is the abrupt path —
+    /// sidecar killed, SDK dropped without close — where the child would
+    /// otherwise outlive its PTY on Windows and linger in the job list.
+    fn drop(&mut self) {
+        if self.closed {
+            return;
+        }
+        if let Err(e) = self.child.kill() {
+            tracing::debug!("drop kill failed: {e}");
+        }
+    }
 }
 
 /// Reader-thread counters. A silent pump (bytes flowing nowhere, errors
@@ -177,6 +197,7 @@ impl PtySession {
             output_rx: rx,
             writer,
             stats,
+            closed: false,
         })
     }
 
@@ -255,6 +276,9 @@ impl PtySession {
 
     /// Bounded close: optionally send quit bytes, wait up to `grace`
     /// (defaults to [`KILL_GRACE_DEFAULT_MS`]), then kill.
+    ///
+    /// `closed` flips only once the child is known dead, so an error escape
+    /// still leaves the [`Drop`] kill armed.
     pub fn close(
         &mut self,
         quit: Option<&[u8]>,
@@ -271,13 +295,18 @@ impl PtySession {
         let start = Instant::now();
         loop {
             match self.try_wait()? {
-                Some(status) => return Ok(status),
+                Some(status) => {
+                    self.closed = true;
+                    return Ok(status);
+                }
                 None if start.elapsed() < grace => {
                     std::thread::sleep(Duration::from_millis(50));
                 }
                 None => {
                     self.child.kill().map_err(|e| PtyError::Io(e.to_string()))?;
-                    return self.child.wait().map_err(|e| PtyError::Io(e.to_string()));
+                    let status = self.child.wait().map_err(|e| PtyError::Io(e.to_string()))?;
+                    self.closed = true;
+                    return Ok(status);
                 }
             }
         }

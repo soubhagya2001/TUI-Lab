@@ -20,6 +20,7 @@
 //! ```
 
 pub mod binary;
+pub mod constants;
 pub mod error;
 pub mod proto;
 pub mod session;

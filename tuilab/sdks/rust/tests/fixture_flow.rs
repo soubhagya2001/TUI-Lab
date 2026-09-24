@@ -125,6 +125,48 @@ fn find_binary_resolves() {
     assert!(find_binary(None).is_ok());
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn runner_isolates_concurrent_runs() {
+    // K3: two runs share one CWD but keep their own report directories.
+    let dir = std::env::temp_dir().join(format!("tuilab-rs-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let suite = dir.join("mini.yaml");
+    std::fs::write(
+        &suite,
+        format!(
+            r#"schema: tui-lab/v1
+name: mini
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: q
+assertions:
+  - exit_code: 0
+"#,
+            fixture_bin()
+        ),
+    )
+    .expect("write suite");
+    let first = dir.join("out-a");
+    let second = dir.join("out-b");
+    let (left, right) = tokio::join!(
+        Runner::run_with_reports_dir(&suite, None, Some(&first)),
+        Runner::run_with_reports_dir(&suite, None, Some(&second)),
+    );
+    for results in [left.expect("first run"), right.expect("second run")] {
+        assert!(!results.is_empty());
+        assert!(results
+            .iter()
+            .all(|suite| suite.get("passed") == Some(&serde_json::Value::Bool(true))));
+    }
+    assert!(first.join("results.json").is_file());
+    assert!(second.join("results.json").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn launch_options_default_is_usable_geometry() {
     // K2: Default must give a real terminal, never 0x0.

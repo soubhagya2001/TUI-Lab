@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { Connection, JsonDict } from "./proto.js";
 import { TuiLabError } from "./errors.js";
 import { findBinary } from "./binary.js";
+import { asyncDisposeSymbol, disposeSymbol } from "./dispose.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -65,6 +66,18 @@ export class TuiTest {
   /** Release the session even when the block raises. */
   async dispose(): Promise<void> {
     await this.close();
+  }
+
+  /** `await using tui = ...` (K4): close on scope exit. */
+  [asyncDisposeSymbol] = async (): Promise<void> => {
+    await this.dispose();
+  };
+
+  /** `using tui = ...` (K4): sync fallback that kills the sidecar. */
+  [disposeSymbol] = (): void => {
+    if (this.closed) return;
+    this.closed = true;
+    this.conn[disposeSymbol]();
   }
 
   /** Send a named key; returns whether the screen changed. */
@@ -212,32 +225,44 @@ export class Runner {
    */
   static readResultsFile(resultsPath: string, startedMs: number): JsonDict[] {
     if (!fs.existsSync(resultsPath)) {
-      throw new TuiLabError("tuilab run produced no reports/results.json");
+      throw new TuiLabError(`tuilab run produced no ${resultsPath}`);
     }
     if (fs.statSync(resultsPath).mtimeMs < startedMs) {
-      throw new TuiLabError("reports/results.json is older than this run (stale results?)");
+      throw new TuiLabError(`${resultsPath} is older than this run (stale results?)`);
     }
     return JSON.parse(fs.readFileSync(resultsPath, "utf8")) as JsonDict[];
   }
 
-  /** YAML suites through `tuilab run` (canonical format, docs/05). */
+  /**
+   * YAML suites through `tuilab run` (canonical format, docs/05).
+   *
+   * K3: `reportsDir` isolates this run's report artifacts (passed through as
+   * `tuilab run --output-dir`) so parallel invocations sharing a CWD never
+   * overwrite each other's results. Defaults to `reports/`.
+   */
   static async run(
     testFile: string,
-    binary?: string
+    binary?: string,
+    reportsDir?: string
   ): Promise<JsonDict[]> {
     const started = Date.now();
-    const { stdout } = await execFileAsync(findBinary(binary), [
-      "run",
-      testFile,
-    ]).catch((err: { code?: number; stdout?: string }) => {
-      const code = err.code ?? 1;
-      if (code !== 0 && code !== 1) {
-        throw new TuiLabError(`tuilab run exited ${code}: ${(err.stdout ?? "").slice(-2000)}`);
+    const base = reportsDir ?? "reports";
+    const args = ["run", testFile];
+    if (reportsDir !== undefined) {
+      fs.mkdirSync(path.resolve(reportsDir), { recursive: true });
+      args.push("--output-dir", reportsDir);
+    }
+    const { stdout } = await execFileAsync(findBinary(binary), args).catch(
+      (err: { code?: number; stdout?: string }) => {
+        const code = err.code ?? 1;
+        if (code !== 0 && code !== 1) {
+          throw new TuiLabError(`tuilab run exited ${code}: ${(err.stdout ?? "").slice(-2000)}`);
+        }
+        return { stdout: err.stdout ?? "" } as { stdout: string };
       }
-      return { stdout: err.stdout ?? "" } as { stdout: string };
-    });
+    );
     void stdout;
-    // Results land next to the invoker's CWD (reports/results.json).
-    return Runner.readResultsFile(path.resolve("reports/results.json"), started);
+    // Results land under the run's report directory.
+    return Runner.readResultsFile(path.resolve(base, "results.json"), started);
   }
 }

@@ -51,6 +51,11 @@ enum Commands {
         /// Run every suite once per geometry, e.g. `80x24,120x40`.
         #[arg(long, value_delimiter = ',', value_parser = parse_terminal)]
         resize_matrix: Vec<(u16, u16)>,
+        /// Write every report artifact under this directory instead of
+        /// `reports/` (results.json, junit, html, history, traces,
+        /// attachments) — keeps concurrent runs from clobbering each other.
+        #[arg(long, value_name = "DIR")]
+        output_dir: Option<PathBuf>,
     },
     /// Re-render stored results (junit for now).
     Report {
@@ -129,6 +134,7 @@ async fn main() {
             tags,
             trace,
             resize_matrix,
+            output_dir,
         } => {
             commands::run(commands::RunArgs {
                 path: path.as_deref(),
@@ -141,6 +147,7 @@ async fn main() {
                 tags: &tags,
                 trace: trace.as_deref(),
                 resize_matrix: &resize_matrix,
+                output_dir: output_dir.as_deref(),
             })
             .await
         }

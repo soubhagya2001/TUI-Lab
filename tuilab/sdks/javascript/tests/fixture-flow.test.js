@@ -5,7 +5,8 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { TuiTest, Runner, TuiLabError, findBinary } = require("../dist/index.js");
+const { TuiTest, Runner, TuiLabError, findBinary, Connection } = require("../dist/index.js");
+const { disposeSymbol } = require("../dist/dispose.js");
 
 const WORKSPACE = path.resolve(__dirname, "..", "..", "..");
 const FIXTURE_DIR = path.join(WORKSPACE, "tests", "fixtures", "ratatui-sample");
@@ -143,7 +144,60 @@ describe("K1-K4 surface", () => {
     assert.throws(() => Runner.readResultsFile(target, Date.now()), /stale/);
     fs.writeFileSync(target, '[{"passed": true}]');
     assert.deepEqual(Runner.readResultsFile(target, Date.now() - 1000), [{ passed: true }]);
-    assert.throws(() => Runner.readResultsFile(path.join(dir, "missing.json"), 0), /no reports/);
+    assert.throws(
+      () => Runner.readResultsFile(path.join(dir, "missing.json"), 0),
+      /produced no/
+    );
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it("Runner isolates runs in their own reports dir (K3)", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tuilab-js-out-"));
+    const suite = path.join(dir, "mini.yaml");
+    fs.writeFileSync(
+      suite,
+      `schema: tui-lab/v1
+name: mini
+application:
+  command: "${FIXTURE}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: q
+assertions:
+  - exit_code: 0
+`
+    );
+    // Two runs, two dirs, one CWD: neither may read the other's results.
+    const [first, second] = await Promise.all(
+      ["out-a", "out-b"].map((name) => Runner.run(suite, undefined, path.join(dir, name)))
+    );
+    assert.ok(first.length > 0 && first.every((s) => s.passed));
+    assert.ok(second.length > 0 && second.every((s) => s.passed));
+    assert.ok(fs.existsSync(path.join(dir, "out-a", "results.json")));
+    assert.ok(fs.existsSync(path.join(dir, "out-b", "results.json")));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("Symbol.dispose kills a forgotten sidecar (K4)", async () => {
+    const conn = await Connection.spawn();
+    const pid = conn.pid;
+    assert.ok(pid, "sidecar pid");
+    assert.equal(processAlive(pid), true, "sidecar runs before dispose");
+    conn[disposeSymbol]();
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline && processAlive(pid)) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(processAlive(pid), false, "disposed sidecar must die");
+  });
 });
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

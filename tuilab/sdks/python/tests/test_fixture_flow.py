@@ -87,5 +87,35 @@ assertions:
     assert all(suite["passed"] for suite in results)
 
 
+def test_runner_isolates_concurrent_runs(tmp_path, monkeypatch) -> None:
+    """K3: two runs in one CWD, two report dirs, no clobbering."""
+    suite = tmp_path / "mini.yaml"
+    suite.write_text(
+        f"""schema: tui-lab/v1
+name: mini
+application:
+  command: "{fixture_bin()}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - press: q
+assertions:
+  - exit_code: 0
+"""
+    )
+    monkeypatch.chdir(tmp_path)
+
+    async def run_both() -> tuple[list[dict], list[dict]]:
+        return await asyncio.gather(
+            Runner.run(suite, reports_dir=tmp_path / "out-a"),
+            Runner.run(suite, reports_dir=tmp_path / "out-b"),
+        )
+
+    first, second = asyncio.run(run_both())
+    assert all(entry["passed"] for entry in first + second)
+    assert (tmp_path / "out-a" / "results.json").is_file()
+    assert (tmp_path / "out-b" / "results.json").is_file()
+
+
 def test_find_binary_resolves() -> None:
     assert find_binary().is_file()

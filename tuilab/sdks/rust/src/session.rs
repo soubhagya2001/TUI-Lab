@@ -5,6 +5,7 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use crate::binary::find_binary;
+use crate::constants::{DEFAULT_REPORTS_DIR, RESULTS_FILE};
 use crate::error::TuiLabError;
 use crate::proto::{Connection, LaunchOptions};
 
@@ -63,6 +64,11 @@ impl TuiTest {
     /// Session id for log correlation.
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// Sidecar process id (diagnostics + leak tests).
+    pub fn sidecar_pid(&self) -> Option<u32> {
+        self.conn.pid()
     }
 
     async fn act(&mut self, action: Value, name: &str) -> Result<Value, TuiLabError> {
@@ -240,12 +246,35 @@ pub struct Runner;
 impl Runner {
     /// Run a suite file; return parsed results (raise on infra failures).
     pub async fn run(test_file: &Path, binary: Option<&Path>) -> Result<Vec<Value>, TuiLabError> {
+        Self::run_with_reports_dir(test_file, binary, None).await
+    }
+
+    /// `run` with an isolated report directory (K3).
+    ///
+    /// `reports_dir` is passed through as `tuilab run --output-dir` so
+    /// parallel invocations sharing a CWD never overwrite each other's
+    /// results. `None` keeps the default `reports/` location.
+    pub async fn run_with_reports_dir(
+        test_file: &Path,
+        binary: Option<&Path>,
+        reports_dir: Option<&Path>,
+    ) -> Result<Vec<Value>, TuiLabError> {
         // K3: the engine owns the output path, so staleness is checked by
         // mtime — a leftover must never pass as fresh output.
         let started = std::time::SystemTime::now();
-        let output = tokio::process::Command::new(find_binary(binary)?)
-            .arg("run")
-            .arg(test_file)
+        let mut command = tokio::process::Command::new(find_binary(binary)?);
+        command.arg("run").arg(test_file);
+        let base = match reports_dir {
+            Some(dir) => {
+                std::fs::create_dir_all(dir).map_err(|e| {
+                    TuiLabError::new(format!("create reports dir {}: {e}", dir.display()))
+                })?;
+                command.arg("--output-dir").arg(dir);
+                dir.to_path_buf()
+            }
+            None => Path::new(DEFAULT_REPORTS_DIR).to_path_buf(),
+        };
+        let output = command
             .output()
             .await
             .map_err(|e| TuiLabError::new(format!("spawn tuilab run: {e}")))?;
@@ -263,8 +292,14 @@ impl Runner {
                     .collect::<String>()
             )));
         }
-        // Results land next to the invoker's CWD (reports/results.json).
-        Self::read_results("reports/results.json", started)
+        // Results land under the run's report directory.
+        let results = base.join(RESULTS_FILE);
+        Self::read_results(
+            results
+                .to_str()
+                .ok_or_else(|| TuiLabError::new("reports path is not utf-8"))?,
+            started,
+        )
     }
 }
 
@@ -280,9 +315,9 @@ impl Runner {
             .modified()
             .map_err(|e| TuiLabError::new(format!("read results: {e}")))?;
         if modified < started {
-            return Err(TuiLabError::new(
-                "reports/results.json is older than this run (stale results?)".to_string(),
-            ));
+            return Err(TuiLabError::new(format!(
+                "{path} is older than this run (stale results?)"
+            )));
         }
         let text = std::fs::read_to_string(path)
             .map_err(|e| TuiLabError::new(format!("read results: {e}")))?;

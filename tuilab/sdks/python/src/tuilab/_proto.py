@@ -107,6 +107,22 @@ class Connection:
         self._proc = proc
         self._closed = False
 
+    def __del__(self) -> None:
+        """K4 safety net: a dropped connection must not leak the sidecar.
+
+        `close` is the graceful path (EOF, bounded wait, then kill). The
+        garbage collector can run while an event loop is still alive, so
+        the abrupt path only signals the process; the engine's
+        `PtySession` drop reaps the app under test.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._proc.kill()
+        except Exception:  # pragma: no cover - interpreter/loop teardown
+            pass
+
     @classmethod
     async def spawn(
         cls, binary: str | os.PathLike[str] | None = None

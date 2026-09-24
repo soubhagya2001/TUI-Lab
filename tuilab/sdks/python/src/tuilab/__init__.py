@@ -190,19 +190,17 @@ class TuiTest:
             await self._conn.close()
 
 
-def _read_results(since: float) -> list[dict]:
-    """Read `reports/results.json`, rejecting missing or stale files (K3).
+def _read_results(since: float, reports_dir: Path) -> list[dict]:
+    """Read `<reports_dir>/results.json`, rejecting missing/stale files (K3).
 
     `since` is the monotonic start time of the run; a results file older
     than the run is a leftover that must never pass as fresh output.
     """
-    results = Path("reports/results.json")
+    results = reports_dir / "results.json"
     if not results.is_file():
-        raise TuiLabError("tuilab run produced no reports/results.json")
+        raise TuiLabError(f"tuilab run produced no {results.as_posix()}")
     if results.stat().st_mtime < since:
-        raise TuiLabError(
-            "reports/results.json is older than this run (stale results?)"
-        )
+        raise TuiLabError(f"{results.as_posix()} is older than this run (stale results?)")
     return json.loads(results.read_text())
 
 
@@ -214,13 +212,24 @@ class Runner:
         test_file: str | os.PathLike[str],
         *,
         binary: str | os.PathLike[str] | None = None,
+        reports_dir: str | os.PathLike[str] | None = None,
     ) -> list[dict]:
-        """Run a suite file; return parsed results (raise on infra failures)."""
+        """Run a suite file; return parsed results (raise on infra failures).
+
+        K3: `reports_dir` isolates the run's report artifacts (passed through
+        as `tuilab run --output-dir`) so parallel invocations sharing a CWD
+        never overwrite each other's results. Defaults to `reports/`.
+        """
         started = time.time()
+        args = ["run", str(test_file)]
+        base = Path("reports")
+        if reports_dir is not None:
+            base = Path(reports_dir)
+            base.mkdir(parents=True, exist_ok=True)
+            args += ["--output-dir", str(base)]
         proc = await asyncio.create_subprocess_exec(
             str(find_binary(binary)),
-            "run",
-            str(test_file),
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -230,8 +239,8 @@ class Runner:
             raise TuiLabError(
                 f"tuilab run exited {code}: {out.decode(errors='replace')[-2000:]}"
             )
-        # Results land next to the invoker's CWD (reports/results.json).
-        return _read_results(started)
+        # Results land under the run's report directory.
+        return _read_results(started, base)
 
 
 __all__ = ["Connection", "Runner", "TuiLabError", "TuiTest", "find_binary"]

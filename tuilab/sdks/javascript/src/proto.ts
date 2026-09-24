@@ -9,6 +9,7 @@ import { ChildProcess, spawn } from "node:child_process";
 import * as readline from "node:readline";
 import { TuiLabError } from "./errors.js";
 import { findBinary } from "./binary.js";
+import { disposeSymbol } from "./dispose.js";
 
 export type JsonDict = Record<string, unknown>;
 
@@ -78,6 +79,18 @@ export class Connection {
   }
 
   private closed = false;
+
+  /** Sidecar process id (diagnostics + leak tests). */
+  get pid(): number | undefined {
+    return this.proc.pid;
+  }
+
+  /** K4 safety net: a dropped connection must not leak the sidecar. */
+  [disposeSymbol] = (): void => {
+    if (this.closed) return;
+    this.closed = true;
+    this.proc.kill();
+  }
 
   async close(): Promise<void> {
     // Idempotent (K4): a second close returns at once instead of throwing

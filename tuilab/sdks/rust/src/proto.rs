@@ -21,6 +21,25 @@ pub struct Connection {
     child: Child,
     stdin: ChildStdin,
     lines: tokio::io::Lines<BufReader<ChildStdout>>,
+    /// Set by [`Connection::close`] so [`Drop`] skips a redundant kill.
+    closed: bool,
+}
+
+impl Drop for Connection {
+    /// K4 safety net: a dropped sidecar must not keep running.
+    ///
+    /// [`Connection::close`] is the graceful path (EOF, bounded wait, then
+    /// kill). Drop covers the leak case — a `TuiTest` dropped without
+    /// `close` — by killing the sidecar outright; the engine's
+    /// `PtySession` drop then reaps the app under test.
+    fn drop(&mut self) {
+        if self.closed {
+            return;
+        }
+        if let Err(e) = self.child.start_kill() {
+            tracing::debug!(error = %e, "sidecar start_kill failed");
+        }
+    }
 }
 
 impl Connection {
@@ -46,7 +65,13 @@ impl Connection {
             child,
             stdin,
             lines: BufReader::new(stdout).lines(),
+            closed: false,
         })
+    }
+
+    /// Sidecar process id (diagnostics + leak tests).
+    pub fn pid(&self) -> Option<u32> {
+        self.child.id()
     }
 
     /// Send one action, return the reply object.
@@ -72,6 +97,7 @@ impl Connection {
 
     /// EOF the engine and reap the process.
     pub async fn close(mut self) -> Result<(), TuiLabError> {
+        self.closed = true;
         use tokio::io::AsyncWriteExt as _;
         let _ = self.stdin.shutdown().await;
         match tokio::time::timeout(Duration::from_secs(10), self.child.wait()).await {

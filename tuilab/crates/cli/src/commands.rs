@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 
 use crate::config::{load, ProjectConfig};
 use crate::constants::{
-    CONFIG_FILE, EXIT_CONFIG_ERROR, EXIT_OK, EXIT_PTY_ERROR, EXIT_TESTS_FAILED, EXIT_TIMEOUT,
-    TESTS_DIR,
+    ATTACHMENTS_DIR, CONFIG_FILE, EXIT_CONFIG_ERROR, EXIT_OK, EXIT_PTY_ERROR, EXIT_TESTS_FAILED,
+    EXIT_TIMEOUT, HISTORY_FILE, HTML_FILE, JUNIT_FILE, REPORTS_DIR, RESULTS_FILE, TESTS_DIR,
+    TRACES_DIR,
 };
 use tui_lab_core::{run_file_bounded, RunOptions, SuiteResult, TerminalInfo};
 use tui_lab_protocol::TestFile;
@@ -148,6 +149,12 @@ pub struct RunArgs<'a> {
     pub trace: Option<&'a str>,
     /// Run every suite once per geometry (empty = run as declared).
     pub resize_matrix: &'a [(u16, u16)],
+    /// Rebase every report artifact (results/junit/html/history/attachments/
+    /// traces) under this directory instead of `reports/`.
+    ///
+    /// K3: parallel SDK invocations sharing a CWD otherwise overwrite one
+    /// another; each run points at its own directory.
+    pub output_dir: Option<&'a Path>,
 }
 
 /// Run suites (sequentially or in parallel); returns the CLI exit code.
@@ -168,12 +175,13 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
         tags,
         trace,
         resize_matrix,
+        output_dir,
     } = args;
     if step_mode {
         eprintln!("step mode: Enter continues each step, q aborts the run");
     }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config = match load(&cwd) {
+    let mut config = match load(&cwd) {
         Ok(config) => config,
         Err(e) => {
             eprintln!("config error: {e}");
@@ -231,6 +239,18 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
     }
 
     let mut exit = EXIT_OK;
+    // K3: `--output-dir` rebases every artifact so concurrent runs from one
+    // CWD (SDK `Runner.run`) never clobber each other's output.
+    let reports_base = match output_dir {
+        Some(dir) => {
+            let base = dir.to_path_buf();
+            config.report.json = base.join(RESULTS_FILE).to_string_lossy().into_owned();
+            config.report.junit = base.join(JUNIT_FILE).to_string_lossy().into_owned();
+            config.report.html = base.join(HTML_FILE).to_string_lossy().into_owned();
+            base
+        }
+        None => PathBuf::from(REPORTS_DIR),
+    };
     let requested = parallel.unwrap_or(config.parallel);
     let mut slots = requested.clamp(1, tui_lab_core::sessions::DEFAULT_MAX_SESSIONS);
     // R9: clamping is visible, never silent.
@@ -323,9 +343,9 @@ pub async fn run(args: RunArgs<'_>) -> i32 {
     ordered.sort_by_key(|(index, _)| *index);
     let mut results: Vec<SuiteResult> = ordered.into_iter().map(|(_, result)| result).collect();
 
-    collect_attachments(&mut results, &declared);
-    append_history(&results);
-    write_traces(&results, trace);
+    collect_attachments(&mut results, &declared, &reports_base);
+    append_history(&results, &reports_base);
+    write_traces(&results, trace, &reports_base);
 
     let report_path = PathBuf::from(&config.report.json);
     if let Err(e) = write_json_all(&report_path, &results) {
@@ -581,12 +601,13 @@ fn safe_name(suite: &str) -> String {
         .collect()
 }
 
-/// Copy suite-declared attachments into `reports/attachments/<suite>/`,
+/// Copy suite-declared attachments into `<base>/attachments/<suite>/`,
 /// recording report-relative paths on each result. Paths resolve relative
 /// to the invocation dir; missing files warn and skip (never fail the run).
 fn collect_attachments(
     results: &mut [SuiteResult],
     declared: &std::collections::HashMap<String, Vec<String>>,
+    base: &Path,
 ) {
     for result in results {
         if result.skipped {
@@ -602,9 +623,7 @@ fn collect_attachments(
                 eprintln!("warning: attachment has no file name: {name}");
                 continue;
             };
-            let dest = PathBuf::from("reports/attachments")
-                .join(&safe)
-                .join(file_name);
+            let dest = base.join(ATTACHMENTS_DIR).join(&safe).join(file_name);
             if let Some(parent) = dest.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
                     eprintln!("warning: attachment dir {}: {e}", parent.display());
@@ -622,9 +641,9 @@ fn collect_attachments(
     }
 }
 
-/// Append one history line per suite to `reports/history.jsonl` (flake
+/// Append one history line per suite to `<base>/history.jsonl` (flake
 /// tracking). Never fails the run.
-fn append_history(results: &[SuiteResult]) {
+fn append_history(results: &[SuiteResult], base: &Path) {
     use std::io::Write as _;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -646,7 +665,7 @@ fn append_history(results: &[SuiteResult]) {
         buf.push('\n');
     }
     if let Err(e) = (|| -> std::io::Result<()> {
-        let path = PathBuf::from("reports/history.jsonl");
+        let path = base.join(HISTORY_FILE);
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent)?;
@@ -662,9 +681,9 @@ fn append_history(results: &[SuiteResult]) {
     }
 }
 
-/// Write `reports/traces/<suite>.zip` for failed suites — or every suite
+/// Write `<base>/traces/<suite>.zip` for failed suites — or every suite
 /// with `--trace always` (`never` disables). Skipped suites have no run.
-fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
+fn write_traces(results: &[SuiteResult], trace: Option<&str>, base: &Path) {
     if trace == Some("never") {
         return;
     }
@@ -674,7 +693,7 @@ fn write_traces(results: &[SuiteResult], trace: Option<&str>) {
             continue;
         }
         let safe = safe_name(&result.suite);
-        let path = PathBuf::from("reports/traces").join(format!("{safe}.zip"));
+        let path = base.join(TRACES_DIR).join(format!("{safe}.zip"));
         match write_trace(&path, result) {
             Ok(()) => eprintln!("trace: {}", path.display()),
             Err(e) => eprintln!("warning: trace write {}: {e}", path.display()),

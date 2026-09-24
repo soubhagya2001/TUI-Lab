@@ -4,6 +4,20 @@
 pub const CONFIG_FILE: &str = "tuilab.yaml";
 /// Default tests directory.
 pub const TESTS_DIR: &str = "tests";
+/// Default report output directory (rebased by `run --output-dir`).
+pub const REPORTS_DIR: &str = "reports";
+/// Report file names inside the reports directory.
+pub const RESULTS_FILE: &str = "results.json";
+/// JUnit XML file name inside the reports directory.
+pub const JUNIT_FILE: &str = "junit.xml";
+/// HTML report file name inside the reports directory.
+pub const HTML_FILE: &str = "index.html";
+/// Flake history file name inside the reports directory.
+pub const HISTORY_FILE: &str = "history.jsonl";
+/// Attachments subdirectory of the reports directory.
+pub const ATTACHMENTS_DIR: &str = "attachments";
+/// Traces subdirectory of the reports directory.
+pub const TRACES_DIR: &str = "traces";
 /// Maximum JSON-lines action size (SDK sidecar guard).
 pub const MAX_PROTO_LINE_BYTES: usize = 1024 * 1024;
 /// Recorder: main-loop tick (pump + render + input drain).

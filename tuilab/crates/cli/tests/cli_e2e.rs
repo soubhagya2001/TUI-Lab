@@ -304,6 +304,31 @@ fn bad_default_timeout_is_config_error() {
 }
 
 #[test]
+fn output_dir_rebases_every_report_artifact() {
+    // K3: `--output-dir` moves results/history/traces out of the shared
+    // `reports/` so concurrent runs never clobber one another.
+    let dir = scratch("output-dir");
+    let out = dir.join("runs").join("a");
+    let suite = write(&dir, "green.yaml", &green_suite(&fixture_bin()));
+    let output = Command::new(tuilab())
+        .arg("run")
+        .arg(&suite)
+        .arg("--output-dir")
+        .arg(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("run suite");
+    assert!(output.status.success(), "run passes");
+    assert!(out.join("results.json").is_file(), "results rebased");
+    assert!(out.join("history.jsonl").is_file(), "history rebased");
+    assert!(
+        !dir.join("reports").join("results.json").exists(),
+        "nothing written to the default reports dir"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn oversized_parallel_warns_and_clamps() {
     // R9: `--parallel 99` warns on stderr, clamps to the cap, still runs.
     let dir = scratch("clamp");

@@ -92,7 +92,39 @@ def test_read_results_rejects_stale_file(tmp_path, monkeypatch) -> None:
     old = time.time() - 60
     os.utime(target, (old, old))
     with pytest.raises(TuiLabError, match="stale"):
-        _read_results(time.time())
+        _read_results(time.time(), reports)
     target.write_text('[{"passed": true}]')
-    assert _read_results(time.time() - 1) == [{"passed": True}]
+    assert _read_results(time.time() - 1, reports) == [{"passed": True}]
     assert Runner is not None
+
+
+def test_dropped_connection_kills_the_sidecar() -> None:
+    """K4: forgetting `close` must not leave a sidecar running."""
+    from tuilab._proto import Connection
+
+    async def check() -> None:
+        conn = await Connection.spawn(find_binary())
+        pid = conn._proc.pid
+        assert _pid_alive(pid), "sidecar runs before the drop"
+        del conn  # no close: the leak path
+        deadline = time.time() + 15
+        while time.time() < deadline and _pid_alive(pid):
+            await asyncio.sleep(0.05)
+        assert not _pid_alive(pid), f"dropped sidecar {pid} must die"
+
+    asyncio.run(check())
+
+
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
+            capture_output=True,
+            text=True,
+        )
+        return f'"{pid}"' in out.stdout
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
