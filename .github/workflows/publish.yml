@@ -29,16 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          cache-enable: true
       - name: Check lockstep versions
         run: |
+          uv run python tuilab/pack/bump_versions.py --check
           TAG="${GITHUB_REF_NAME#v}"
           test "$(grep '^version = ' tuilab/Cargo.toml | head -1 | cut -d'\"' -f2)" = "$TAG"
           test "$(grep '^version = ' tuilab/sdks/python/pyproject.toml | cut -d'\"' -f2)" = "$TAG"
-          test "$(node -p "require('./tuilab/sdks/javascript/package.json').version")" = "$TAG"
-          test "$(node -p "require('./tuilab/sdks/npm-cli/package.json').version")" = "$TAG"
-          for plat in win32-x64 linux-x64 darwin-arm64; do
-            test "$(node -p "require('./tuilab/sdks/npm-cli/platforms/$plat/package.json').version")" = "$TAG"
-          done
           echo "all versions = $TAG"
 
   pypi:

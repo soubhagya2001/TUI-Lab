@@ -97,6 +97,49 @@ jobs:
             SUITE="$suite" uvx --with jsonschema --with pyyaml python -c "import json,jsonschema,os,yaml; schema=json.load(open('tuilab/schemas/test-schema-v1.json')); doc=yaml.safe_load(open(os.environ['SUITE'])); jsonschema.validate(doc,schema); print('ok:',os.environ['SUITE'])"
           done
 
+  pack-gate:
+    # K5: version drift and broken packing must fail on the PR, not on the
+    # release. Publishes re-pack per platform; this job proves the scripts
+    # and manifests still work, cheaply, on every change.
+    name: version + pack gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tuilab
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tuilab/sdks/javascript/package-lock.json
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          cache-enable: true
+      - name: Version lockstep check
+        run: uv run python tuilab/pack/bump_versions.py --check
+      - name: Build the engine the wheel embeds
+        run: cargo build -p tui-lab-cli
+        working-directory: tuilab
+      - name: Pack the platform wheel
+        run: |
+          uv run --with build --with wheel python tuilab/sdks/python/pack/pack_wheel.py \
+            --binary-dir tuilab/target/debug \
+            --plat manylinux_x86_64 \
+            --outdir "$RUNNER_TEMP/wheels"
+      - name: Pack the JS SDK and npm launcher tarballs
+        run: |
+          cd tuilab/sdks/javascript && npm ci --no-audit --no-fund && npm pack --dry-run
+          cd ../npm-cli && npm pack --dry-run
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pack-gate-logs
+          path: tuilab/sdks/*/dist/
+          retention-days: 7
+
   sdk-python:
     name: python sdk (${{ matrix.os }})
     strategy:

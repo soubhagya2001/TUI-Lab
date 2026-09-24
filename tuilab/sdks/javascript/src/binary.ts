@@ -1,17 +1,29 @@
-/** Locate the `tuilab` binary: explicit → TUILAB_BIN → @tui-lab/cli → workspace → PATH. */import { existsSync } from "node:fs";
+/** Locate the `tuilab` binary: explicit → TUILAB_BIN → @tui-lab/cli → workspace → PATH. */
+import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { TuiLabError } from "./errors.js";
 
-function platformKey(): string {
-  const arch = process.arch === "arm64" ? "arm64" : "x64";
+/**
+ * Platform tag for the bundled-engine package, or `null` when the
+ * platform/arch has no published package.
+ *
+ * K5: an unknown arch must never collapse to `x64` — that silently loads
+ * a foreign binary. Unsupported hosts fall through to the workspace/PATH
+ * lookups instead (a self-built engine can still work there).
+ */
+function platformKey(): string | null {
+  const arch = process.arch;
+  if (arch !== "x64" && arch !== "arm64") return null;
   return `${process.platform}-${arch}`;
 }
 
 /** Engine bundled via the @tui-lab/cli platform package, if installed. */
 function cliPackageBinary(): string | null {
+  const key = platformKey();
+  if (!key) return null;
   const file = process.platform === "win32" ? "tuilab.exe" : "tuilab";
   try {
-    const pkg = require.resolve(`@tui-lab/cli-${platformKey()}/package.json`, {
+    const pkg = require.resolve(`@tui-lab/cli-${key}/package.json`, {
       paths: [__dirname],
     });
     const candidate = path.join(path.dirname(pkg), file);
