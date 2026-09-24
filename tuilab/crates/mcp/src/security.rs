@@ -27,8 +27,20 @@ impl Allowlist {
         static DEFAULTS: OnceLock<Allowlist> = OnceLock::new();
         DEFAULTS
             .get_or_init(|| {
-                Allowlist::from_sources(&["^\\./.*", "^cargo run.*", "^python.*"])
-                    .expect("default allowlist compiles")
+                // R11: no `expect` on the production path. These patterns are
+                // crate constants, so a failure is a build defect — fail
+                // closed (an empty allowlist denies every command) instead of
+                // panicking the MCP server.
+                match Allowlist::from_sources(&["^\\./.*", "^cargo run.*", "^python.*"]) {
+                    Ok(allowlist) => allowlist,
+                    Err(e) => {
+                        tracing::error!("default allowlist failed to compile (deny-all): {e}");
+                        Allowlist {
+                            patterns: Vec::new(),
+                            sources: Vec::new(),
+                        }
+                    }
+                }
             })
             .clone()
     }
