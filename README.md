@@ -101,8 +101,3 @@ Full walkthroughs live in the [developer guide](https://soubhagya2001.github.io/
 Bug reports: please include your suite file, the exit code, and
 `reports/results.json`.
 
-## For contributors
-
-Design source of truth: `docs/` (vision, architecture, protocol, roadmap).
-Agent conventions: [AGENTS.md](./AGENTS.md). Registry deploys:
-[`docs/16-packaging-distribution.md`](./docs/16-packaging-distribution.md).
