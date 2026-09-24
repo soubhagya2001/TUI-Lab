@@ -496,7 +496,7 @@ async fn idle_sessions_reaped_on_tool_entry() {
         root,
         allow,
         AuditConfig::disabled(),
-        std::time::Duration::from_millis(100),
+        std::time::Duration::from_millis(250),
     );
     let id = handler
         .tui_launch(Parameters(LaunchParams {
@@ -520,7 +520,7 @@ async fn idle_sessions_reaped_on_tool_entry() {
         }))
         .await
         .expect("fresh session serves");
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     // Past idle: the next tool entry reaps first, so the read fails.
     let err = match handler
         .tui_screen(Parameters(ScreenParams {

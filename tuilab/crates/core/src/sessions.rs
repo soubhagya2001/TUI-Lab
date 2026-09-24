@@ -24,7 +24,11 @@ pub struct LiveSession {
     pub emu: Emulator,
     /// Human input history (`press ENTER`, …).
     pub input_history: Vec<String>,
-    /// Last successful access (idle reaping).
+    /// Last client-initiated access (idle reaping).
+    ///
+    /// Stamped by spawn, [`SessionRegistry::get_mut`] (every write path goes
+    /// through it), and resize. R10: reads never stamp — a poll loop must
+    /// not keep an abandoned session alive forever.
     pub last_active: Instant,
 }
 
@@ -137,7 +141,10 @@ impl SessionRegistry {
         Ok(id)
     }
 
-    /// Mutable access with activity stamp; errors name the unknown id.
+    /// Mutable client access with activity stamp; errors name the unknown id.
+    ///
+    /// Writes (press/type), resizes, and in-flight waits all come through
+    /// here, so a session a client is actively driving never idles out.
     pub fn get_mut(&mut self, id: &str) -> Result<&mut LiveSession> {
         let session = self
             .sessions
@@ -229,10 +236,13 @@ impl SessionRegistry {
     ///
     /// The single choke point for live reads: handshake replies always flow
     /// because every byte passes through the emulator immediately.
+    ///
+    /// R10: reads never refresh `last_active`. Polling is not usage — the
+    /// idle reaper must still see a client that stopped driving the session,
+    /// even while a read-side loop keeps draining the PTY.
     pub fn pump_once(session: &mut LiveSession, budget: Duration) -> String {
         let chunk = session.pty.poll(budget);
         session.emu.feed(&chunk);
-        session.last_active = Instant::now();
         session.emu.text()
     }
 }

@@ -100,7 +100,13 @@ async fn dispatch(registry: &mut SessionRegistry, snapshot_base: &Path, line: &s
                 Err(e) => return error_response(&e.to_string()),
             };
             let screen = match registry.get_mut(&id) {
-                Ok(session) => SessionRegistry::pump_once(session, Duration::from_millis(500)),
+                Ok(session) => {
+                    let screen = SessionRegistry::pump_once(session, Duration::from_millis(500));
+                    // R10: the warm-up pump can outlast the idle window;
+                    // the launch response is the last client action.
+                    session.last_active = std::time::Instant::now();
+                    screen
+                }
                 Err(e) => return error_response(&e.to_string()),
             };
             serde_json::json!({

@@ -86,6 +86,13 @@ fn remove_with_quit_reaps_a_clean_exit() {
             ..shell_spawn()
         }))
         .expect("spawn");
+    // Let the shell finish booting before the quit bytes: under parallel
+    // ConPTY load a brand-new console can miss early input entirely, which
+    // looks identical to "quit bytes don't work".
+    SessionRegistry::pump_once(
+        registry.get_mut(&id).expect("session"),
+        Duration::from_millis(300),
+    );
     let closed = registry.remove(&id, Some(quit)).expect("remove");
     assert!(
         closed.exited_cleanly,
@@ -125,4 +132,47 @@ fn fresh_sessions_survive_reaping() {
     assert_eq!(reaped, 0);
     assert!(registry.get_mut(&id).is_ok());
     registry.remove(&id, None).expect("remove");
+}
+
+/// R10: read-side polling is not usage — a long-held read loop must not
+/// keep an abandoned session alive. The old pump stamp refreshed
+/// `last_active` on every tick, so the reaper never fired for pollers.
+#[test]
+fn pump_once_does_not_refresh_activity() {
+    let mut registry = SessionRegistry::new();
+    let id = registry
+        .spawn(NewSession::new(shell_spawn()))
+        .expect("spawn");
+    {
+        // One client access, then a read loop far longer than the idle
+        // window: pumps must leave the activity stamp alone.
+        let session = registry.get_mut(&id).expect("session");
+        for _ in 0..3 {
+            SessionRegistry::pump_once(session, Duration::from_millis(30));
+        }
+    }
+    let reaped = registry.reap_idle(Duration::from_millis(20));
+    assert_eq!(reaped, 1, "reads must not refresh last_active");
+    assert!(registry.is_empty());
+}
+
+/// Counterpart: a client that comes back after the idle window does keep
+/// the session — writes, resizes, and in-flight waits all ride `get_mut`.
+#[test]
+fn client_access_refreshes_activity() {
+    let mut registry = SessionRegistry::new();
+    let id = registry
+        .spawn(NewSession::new(shell_spawn()))
+        .expect("spawn");
+    std::thread::sleep(Duration::from_millis(120));
+    registry.get_mut(&id).expect("client access");
+    assert_eq!(
+        registry.reap_idle(Duration::from_millis(50)),
+        0,
+        "a touched session is not idle"
+    );
+    // Reap (short kill grace) instead of `remove`, which would spend the
+    // full close grace on a shell that never exits on its own.
+    assert_eq!(registry.reap_idle(Duration::ZERO), 1);
+    assert!(registry.is_empty());
 }

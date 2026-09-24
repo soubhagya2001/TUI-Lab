@@ -242,6 +242,9 @@ impl TuiLabHandler {
             .get_mut(&id)
             .map_err(|e| tool_error("launch", e))?;
         let screen = SessionRegistry::pump_once(session, Duration::from_millis(500));
+        // R10: the warm-up pump can outlast the idle window; the launch
+        // response is the last client action, so activity starts here.
+        session.last_active = std::time::Instant::now();
         Ok(Json(LaunchOut {
             session_id: id,
             status: "running".to_string(),
