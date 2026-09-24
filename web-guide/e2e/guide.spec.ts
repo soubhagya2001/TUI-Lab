@@ -5,6 +5,7 @@ const CHAPTERS = [
   { hash: '#/writing-tests', heading: 'Writing tests' },
   { hash: '#/assertions-snapshots', heading: 'Assertions & snapshots' },
   { hash: '#/recorder', heading: 'Recorder' },
+  { hash: '#/recipes', heading: 'Recipes' },
   { hash: '#/cli-reference', heading: 'CLI reference' },
   { hash: '#/mcp-agents', heading: 'MCP & AI agents' },
   { hash: '#/sdks', heading: 'SDKs' },

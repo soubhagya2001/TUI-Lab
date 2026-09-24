@@ -5,10 +5,10 @@ import { Example } from '../components/example';
 # CLI reference
 
 Everything `tuilab` can do, in one place. Day to day you'll use `run` (and
-`record` to create suites); the rest — `report`, `debug`, `step`, `proto` —
-cover reporting, failure triage, and SDK integration. All commands read
+`record` to create suites); the rest — `report`, `trace`, `proto` — cover
+reporting, failure triage, and SDK integration. All commands read
 `tuilab.yaml` in the current directory and exit non-zero on failure, so they
-compose with scripts and shortcuts.
+compose with scripts and CI.
 
 ## Commands
 
@@ -18,40 +18,123 @@ tuilab init
 # Run all tests (defaults to the configured tests dir)
 tuilab run
 
-# Run one file / dir (sequential by default; --parallel fans out, run-all)
-tuilab run tests/e2e/smoke.yaml --parallel 4
+# Run one file / dir (sequential by default; --parallel fans out)
+tuilab run tests/e2e/smoke.yaml
+tuilab run tests/ --terminal 120x40     # override geometry for every suite`} />
 
-# Interactive recording (drives the app, emits YAML with smart waits)
-# end with Ctrl+\\ or stdin EOF; quit the app first
-tuilab record -- ./myapp
+### `run` — selection and hardening flags
 
-# Re-render stored results (self-contained HTML or JUnit XML)
-tuilab report --format html
+<Snippet label="bash" code={`# Parallel fan-out (slots clamp to [1, 8]; results stay in input order;
+# a failing suite never aborts its siblings)
+tuilab run tests/ --parallel 4
 
-# Debug a failed run (full failure bundle: screens, history, diffs)
-tuilab debug reports/results.json
+# Tags: run only suites carrying at least one listed tag
+tuilab run tests/ --tags smoke,login
+
+# Shard: run the Nth 1-based slice of M (split CI matrices)
+tuilab run tests/ --shard 1/3
+
+# Retries: rerun failures up to N extra times (final attempt lands in the
+# report with its attempts count)
+tuilab run tests/ --retries 2
+
+# Resize matrix: every suite once per geometry (names suffixed @WxH)
+tuilab run tests/ --resize-matrix 80x24,120x40
 
 # Step through a run interactively (Enter continues, q aborts; forces sequential)
-tuilab run tests/e2e --step
+tuilab run tests/search.yaml --step
 
-# JSON-lines engine mode for SDK sidecars — one action in, one reply out
+# Debug a failed run: print the full failure bundle (screens, history, diffs)
+tuilab run tests/search.yaml --debug
+
+# Trace capture: 'always' writes a trace.zip per suite, 'never' disables;
+# default retains traces for failures only
+tuilab run tests/ --trace always
+
+# Isolate this run's artifacts (results, junit, html, history, traces,
+# attachments) — concurrent runs in one working directory then never
+# clobber each other
+tuilab run tests/ --output-dir reports/run-42`} />
+
+### `record` — capture a suite interactively
+
+<Snippet label="bash" code={`tuilab record --command "./codegraph" --arg "--flag" --out tests/codegen.yaml
+tuilab record --command "./codegraph" --terminal 120x40
+tuilab record --command "./codegraph" --target python --out tests/codegen.py
+# end with Ctrl+\\ or stdin EOF; quit the app first (see Recorder)`} />
+
+### `report` — re-render stored results
+
+<Snippet label="bash" code={`tuilab report --format junit --out results.xml
+tuilab report --format html --out index.html
+tuilab report --format html --out index.html --results reports/results.json`} />
+
+### `trace` — the trace viewer
+
+Failed runs retain `reports/traces/<suite>.zip` — a stored archive with the
+step timeline, raw PTY output (`pty.bin`), and recorded input beats
+(`inputs.bin`):
+
+<Snippet label="bash" code={`# Render the timeline (steps, timings, failure evidence)
+tuilab trace reports/traces/search-flow.zip
+
+# Replay the raw output bytes with original pacing
+tuilab trace reports/traces/search-flow.zip --replay
+
+# Replay the recorded input beats with original inter-key timing
+tuilab trace reports/traces/search-flow.zip --replay-input`} />
+
+Replay gaps are capped at 1s in both modes, so a stalled app doesn't stall
+the replay.
+
+### `proto` — engine mode for SDKs
+
+<Snippet label="bash" code={`# JSON-lines engine mode: one action in, one reply out (SDK sidecars)
 tuilab proto`} />
 
-Slots clamp to `[1, registry cap 8]`; results stay in input order; a failing suite never aborts its siblings.
+## Project configuration
 
-<Example title="Project configuration" description="The full tuilab.yaml: where suites live, default terminal size and timeouts, parallelism, and where reports go.">
+<Example title="tuilab.yaml" description="The full config: where suites live, default terminal size and timeouts, parallelism, report paths, env, and MCP security.">
 
 <Snippet label="tuilab.yaml" code={`version: "1.0"
-tests_dir: tests
+tests_dir: tests              # default run target for the run command
 snapshots_dir: tests/snapshots
 default_terminal: { width: 120, height: 40 }
-default_timeout: 10s
+default_timeout: 10s          # default wait/assert timeout
 parallel: 4
-report: { json: reports/results.json, html: reports/index.html, junit: reports/junit.xml }
-env:
-  TERM: xterm-256color`} />
+report:
+  json: reports/results.json
+  junit: reports/junit.xml
+  html: reports/index.html
+env:                          # extra env for every launched app
+  TERM: xterm-256color
+security:                     # MCP launch policy (see MCP & AI agents)
+  allow_commands:
+    - "^\\\\./.*"
+    - "^cargo run.*"
+    - "^python.*"`} />
 
 </Example>
+
+A missing `tuilab.yaml` means defaults — the file is optional. Config
+values fill gaps the suite didn't set: `default_terminal` applies when a
+suite leaves 120x40, `env` fills unset variables, and `default_timeout`
+becomes the default wait timeout.
+
+## Reports and artifacts
+
+Every run writes `reports/results.json` (full step trace, timings, screens)
+and appends one line per suite to `reports/history.jsonl` — that history
+powers the flaky-suites section of the HTML report. Suites can declare
+`attachments:` (files copied to `reports/attachments/<suite>/`). See the
+failure-bundle workflow in Troubleshooting.
+
+`tuilab report --format html` renders a self-contained page: a step
+waterfall, snapshot diffs, attachment links, and the flaky-suites section
+computed from the history file. `--output-dir` rebases every artifact
+(results, junit, html, history, traces, attachments) under one directory —
+use it for parallel jobs, sharded CI legs, or SDK runs that share a working
+directory.
 
 ## Exit codes
 
@@ -62,5 +145,28 @@ env:
 | 2 | Config/schema error |
 | 3 | App launch / PTY error |
 | 4 | Timeout / hung process killed |
+
+## CI example
+
+<Snippet label=".github/workflows/tui.yml" code={`steps:
+  - run: cargo build --release
+  - run: tuilab run tests/
+  - run: tuilab report --format junit --out results.xml`} />
+
+Expected output:
+
+```
+TUI Lab Results
+----------------
+✓ startup
+✓ navigation
+✗ invalid input
+✓ graceful exit
+3 passed, 1 failed
+```
+
+JUnit/JSON/HTML artifacts land in `reports/` and upload cleanly as CI
+artifacts. Multipart runs (parallel, sharded, retried) reassemble in input
+order so reports stay diffable run-over-run.
 
 <Callout title="SDKs speak proto">The Python, JavaScript, and Rust SDKs are thin sidecars: they spawn `tuilab proto` and exchange one JSON action per line. See SDKs.</Callout>

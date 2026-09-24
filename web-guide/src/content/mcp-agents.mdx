@@ -5,7 +5,10 @@ import { StepBlock, StepDescription } from '../components/step-block';
 
 # MCP & AI agents
 
-`tuilab-mcp` plugs the engine into any AI assistant that speaks the Model Context Protocol. Instead of writing YAML yourself, you describe what to test in plain words — the agent launches your app, presses keys, reads screens, and reports back.
+`tuilab-mcp` plugs the engine into any AI assistant that speaks the Model
+Context Protocol. Instead of writing YAML yourself, you describe what to
+test in plain words — the agent launches your app, presses keys, reads
+screens, and reports back.
 
 <StepBlock step={1} title="Install the engine">
 
@@ -80,8 +83,85 @@ The agent will launch a session, synchronize on screen text (never fixed sleeps)
 
 </StepBlock>
 
-<Callout title="Safety rails">The server only runs commands listed in `security.allow_commands` in `tuilab.yaml`, and only inside your project folder. Passwords typed with the sensitive flag never reach logs. Sessions are capped at 8 concurrent with a 60s idle kill.</Callout>
+## The ten tools
 
-## Going further
+Two working modes:
 
-Your agent can also resize sessions (`tui_resize` — the server reports back the actual clamped dimensions, so ask it to follow with a wait for the redraw). For compliance records, enable the opt-in call audit in `tuilab.yaml` (`security.audit` → JSONL, one line per tool call, secrets redacted); see `docs/08-mcp-server-spec.md` §8.5.
+- **Mode A — interactive:** `tui_launch` → inspect screen → press → inspect
+  → type → assert. Use for debugging, exploratory QA, bug repro.
+- **Mode B — automated:** `tui_run_test` runs a full YAML suite. Prefer this
+  for regression — don't make the agent press every key when a suite exists.
+
+| Tool | Input (params) | Returns |
+|------|----------------|---------|
+| `tui_launch` | `command`, `args?`, `cwd?`, `width?`, `height?`, `env?` | `session_id`, `status`, first `screen` |
+| `tui_press` | `session_id`, `key`, `delay_ms?` | `ok`, `screen_changed` |
+| `tui_type` | `session_id`, `text`, `sensitive?`, `delay_ms?` | `ok` (never echoes the text) |
+| `tui_screen` | `session_id`, `styled?`, `tree?` | `width`, `height`, `cursor`, `text`, `cells?`, `tree?` |
+| `tui_wait_for_text` | `session_id`, `text`, `regex?`, `timeout_ms?` | `found`, `elapsed_ms`, `screen` |
+| `tui_assert` | `session_id`, `assertion` | `passed`, `detail` |
+| `tui_snapshot` | `session_id`, `name` | `saved`, `diff?` |
+| `tui_resize` | `session_id`, `width`, `height` | `ok`, actual clamped `width`/`height` |
+| `tui_run_test` | `test_file`, `terminal? { width, height }` | `status`, `passed`, `failed`, `failures[]` |
+| `tui_close` | `session_id`, `quit?` | `success`, `exit_code`, `signal?` |
+
+<Callout title="The sync rule">Tool descriptions instruct agents to call `tui_wait_for_text` after every
+input — never assert on a stale screen. `tui_resize` redraw is async, so it
+must be followed by a wait too.</Callout>
+
+Useful details:
+
+- `tui_screen { styled: true }` returns per-cell style data
+  (`x/y/char/fg/bg/bold/underline/reverse`); `{ tree: true }` returns the
+  heuristic accessibility tree (`role/name/x/y/focused`) for targeting —
+  the same widgets `tui_assert { type: "role", role, name }` checks.
+- `tui_type { sensitive: true }` redacts the text from logs and the audit
+  trail (length only).
+- `tui_snapshot` returns `saved: true` when it writes a new golden;
+  later calls compare and return a unified `diff` on mismatch.
+- `tui_close { quit: "q" }` sends quit input and polls for natural exit
+  before killing — no press-quit/close race. It always reaps the process
+  tree; no leaked ConPTY/PTY handles.
+- `tui_assert` accepts the same condition types as the protocol:
+  `text_visible`, `text_not_visible`, `text_regex`, `exact_text`,
+  `cursor_position`, `screen_changed`, `exit_code`, `not_crashed`,
+  `crashed`, `role`.
+
+## Session & safety rules
+
+- **Command allowlist:** `tui_launch` only runs command lines matching
+  `security.allow_commands` regexes in `tuilab.yaml` (defaults: `^\./.*`,
+  `^cargo run.*`, `^python.*`). Everything else is rejected with
+  `FORBIDDEN_COMMAND`.
+- **Cwd jail:** `cwd` must resolve under the project root; `..` escapes are
+  rejected, symlinks resolved. `tui_run_test` suite files are jailed the
+  same way.
+- **Session caps:** max 8 concurrent sessions; a session with no client
+  activity for 60s is reaped automatically. Reading a screen does not count
+  as activity — waiting (`tui_wait_for_text`) does, so a long wait is never
+  reaped out from under you, but an abandoned session always is.
+- Keys, mouse actions, and assertions are the same vocabulary as YAML and
+  the SDKs — one behavior across CLI, MCP, and SDK.
+
+<Snippet label="tuilab.yaml" code={`security:
+  allow_commands:            # regexes, matched against command + args
+    - "^\\\\./.*"
+    - "^cargo run.*"
+    - "^python.*"`} />
+
+## Call audit log (opt-in)
+
+Enable `security.audit` to record every tool call as one JSON line —
+successes and failures alike. Disabled by default; the sink never fails a
+tool.
+
+<Snippet label="tuilab.yaml" code={`security:
+  audit:
+    enabled: true
+    path: reports/mcp-audit.jsonl                  # default
+    fields: [timestamp, tool, session_id, result]  # default = minimal
+    # extras: args, elapsed_ms`} />
+
+`args` is sensitive-aware: text typed with `sensitive: true` records as
+`"[redacted]"`. Unknown field names are config errors — a typo must never
+silently narrow your audit.

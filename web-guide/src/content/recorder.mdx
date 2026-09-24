@@ -4,17 +4,46 @@ import { Example } from '../components/example';
 
 # Recorder
 
-`tuilab record` is the Playwright-Codegen equivalent: drive the app, get YAML with smart waits synthesized for you. Perfect when hand-writing a suite feels slow — record the happy path, then tune the result. What you type and how long you pause becomes `press`/`type` steps interleaved with `wait_for_text`; the output is an ordinary suite file you own.
+`tuilab record` is the Playwright-Codegen equivalent: drive the app, get a
+suite with smart waits synthesized for you. Perfect when hand-writing a
+suite feels slow — record the happy path, then tune the result. What you
+type and how long you pause becomes `press`/`type` steps interleaved with
+`wait_for_text`; the output is an ordinary suite file you own.
 
 ## Recording a flow
 
-Start the recorder against your app, drive it with your keyboard, then quit the app first and end the recording:
+Start the recorder with `--command` (plus repeatable `--arg` flags), drive
+it with your keyboard, then quit the app and end the recording:
 
-<Snippet label="bash" code={`tuilab record -- myapp --flag
-# drive the app with your keyboard...
-# end with Ctrl+\\ or stdin EOF — quit the app first (q)`} />
+<Snippet label="bash" code={`tuilab record --command "./myapp" --arg --verbose --out tests/recorded-login.yaml
+# drive the app with your keyboard and mouse...
+# end with Ctrl+\\ or stdin EOF — quit the app first (q)
+# default output: <command>-record.yaml next to where you ran it`} />
 
-The recorder owns the PTY, paces input in beats, forwards bytes verbatim, and emits a suite where pauses become `wait_for_text` steps with border-stripped targets — never `sleep`.
+The recorder owns the PTY, paces input in beats, and forwards your bytes
+verbatim so replay matches the session byte-for-byte. No sleeps are ever
+emitted: after each beat the screen must settle (3 identical polls), and the
+first new stable line becomes a `wait_for_text` — with box-drawing borders
+and list markers stripped, so `│> alpha-table │` becomes the assertable
+`alpha-table`. Typing runs coalesce into single `type` steps.
+
+## Emit SDK code instead of YAML
+
+`--target python|js|rust` renders the same session as a runnable SDK
+program (default `yaml`; the output extension follows the target). Steps
+map 1:1 onto sidecar calls; assertions and sleeps degrade to comments.
+
+<Snippet label="bash" code={`tuilab record --command "./myapp" --target python --out tests/codegen.py
+tuilab record --command "./myapp" --target js --out tests/codegen.js
+tuilab record --command "./myapp" --target rust --out tests/codegen.rs`} />
+
+## Mouse capture
+
+With a live terminal, the recorder enables SGR mouse tracking for the
+session: clicks synthesize `CLICK x y` / `RIGHT_CLICK x y` /
+`SCROLL_UP|DOWN x y` steps, releases synthesize `RELEASE x y` (button-coded,
+ConPTY-safe). Motion noise between drag endpoints is forwarded but emits no
+steps. Piped (non-terminal) stdin records keyboard only.
 
 <Example title="Emitted recording" description="What the recorder writes: your keypresses interleaved with the waits it synthesized. Hand-tune from here.">
 
@@ -27,18 +56,30 @@ steps:
   - type: "demo"
   - press: TAB
   - type: "s3cret"
-    sensitive: true
   - press: ENTER
   - wait_for_text: "Dashboard"
 cleanup:
-  - press: q`} />
+  - press: q
+assertions:
+  - exit_code: 0`} />
 
 </Example>
+
+## Limits worth knowing
+
+- Spinner/clock screens never stabilize — the recorder times out and keeps
+  the last text as the wait target.
+- Alt chords must arrive together; a trailing lone `ESC` becomes an explicit
+  `press: ESC` step.
+- Boot waits up to 10s for first content; piped scripts get up to 5s to
+  settle after EOF.
 
 ## Replay the capture
 
 <Snippet label="bash" code={`tuilab run tests/recorded-login.yaml`} />
 
-Recorded YAML is ordinary `tui-lab/v1`: edit it, add `assert_text` and masks, commit it like a hand-written suite.
+Recorded YAML is ordinary `tui-lab/v1`: edit it, add `assert_text` and
+masks, commit it like a hand-written suite.
 
-<Callout title="Quit first">Always quit the app before ending the recording. The trailing shutdown sequence otherwise lands in your suite as mystery steps.</Callout>
+<Callout title="Quit first">Always quit the app before ending the recording. The trailing shutdown
+sequence otherwise lands in your suite as mystery steps.</Callout>

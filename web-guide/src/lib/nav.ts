@@ -36,6 +36,11 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     description: 'Record workflows with smart waits.',
   },
   {
+    path: '/recipes',
+    title: 'Recipes',
+    description: 'Copy-paste patterns: search flows, goldens, budgets, CI shards.',
+  },
+  {
     path: '/cli-reference',
     title: 'CLI reference',
     description: 'Commands, flags, tuilab.yaml, exit codes.',
@@ -66,7 +71,7 @@ function section(label: string, paths: string[]): NavSection {
 
 export const NAV_SECTIONS: NavSection[] = [
   section('Start', ['/', '/getting-started']),
-  section('Write', ['/writing-tests', '/assertions-snapshots', '/recorder']),
+  section('Write', ['/writing-tests', '/assertions-snapshots', '/recorder', '/recipes']),
   section('Reference', ['/cli-reference', '/mcp-agents', '/sdks']),
   section('Help', ['/troubleshooting']),
 ]

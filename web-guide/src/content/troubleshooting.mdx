@@ -14,10 +14,54 @@ what the engine saw.
 | What you see | Exit code | Go to |
 |--------------|-----------|-------|
 | `tuilab` command not found | — | Install problems |
+| `config error` / schema error | 2 | Config and schema errors |
 | App never starts | 3 | The app won't launch |
 | Run hangs, then dies | 4 | Hangs and timeouts |
-| Passes sometimes, fails sometimes | 1 | Flaky snapshots |
-| Wrong text on screen | 1 | Reports and failure bundles |
+| Passes sometimes, fails sometimes | 1 | Flaky suites |
+| Wrong text on screen | 1 | Failure bundles and traces |
+
+## Failure bundles and traces
+
+When a suite fails, the engine captures the full evidence — failing step,
+expected vs actual, input history, last screen — and retains a trace
+archive at `reports/traces/<suite>.zip`:
+
+<Snippet label="bash" code={`# Print the failure bundle for a failed run (expected/actual, input
+# history, last screen, per-step timings)
+tuilab run tests/search.yaml --debug
+
+# Render the retained trace's timeline (steps, timings, failure evidence)
+tuilab trace reports/traces/search-flow.zip
+
+# Replay the raw PTY output bytes with original pacing
+tuilab trace reports/traces/search-flow.zip --replay
+
+# Replay the recorded input beats (your exact keystroke timing)
+tuilab trace reports/traces/search-flow.zip --replay-input`} />
+
+For visual triage, the self-contained HTML report shows step timelines and
+snapshot diffs side by side:
+
+<Snippet label="bash" code={`tuilab report --format html --out index.html
+tuilab report --format junit --out results.xml   # CI-native pass/fail`} />
+
+<Callout title="Traces on demand">Failed runs retain traces by default. `--trace always` keeps one for
+every suite; `--trace never` disables. Replaying inputs reproduces the
+original inter-key timing, so a heisenbug that depends on pacing can be
+replayed offline.</Callout>
+
+## Flaky suites
+
+Passes sometimes, fails sometimes, nothing changed? Two usual causes:
+
+1. **Volatile content leaked into a golden.** Mask clocks, PIDs, durations,
+   and random IDs with `mask:` rules (see Assertions & snapshots).
+2. **A race the wait doesn't cover.** `--retries 2` reruns failures so CI
+   stays green while you fix the root cause, and `reports/history.jsonl`
+   tracks each suite's pass rate — the HTML report surfaces a flaky-suites
+   section computed from it.
+
+Re-run three times; if all three pass, the flake is dead.
 
 <StepBlock step={1} title="Install problems">
 
@@ -26,7 +70,7 @@ what the engine saw.
 **`tuilab` not found after install.** Close and reopen your terminal so PATH
 refreshes, then run `tuilab --version`. The `pip`/`uv` install puts both
 `tuilab` and `tuilab-mcp` on PATH; the npm route exposes them through
-`npx @tui-lab/cli`. If the version prints, you're good — move to step 2.
+`npx @tui-lab/cli`. If the version prints, you're good — move on.
 
 **Wrong binary for the OS.** Each installer is platform-specific (Windows x64,
 Linux x64, macOS arm64). If you copied an install across machines, reinstall
@@ -34,58 +78,55 @@ on the target machine instead of copying files over.
 
 </StepBlock>
 
-<StepBlock step={2} title="The app won't launch" tag="exit 3">
+<StepBlock step={2} title="Config and schema errors" tag="exit 2">
 
-<StepDescription>The engine couldn't start your app at all. Check these in order:</StepDescription>
+<StepDescription>Nothing launched — the engine rejected a file before starting anything.</StepDescription>
 
-- **Command path.** Relative paths in your suite resolve from `cwd`, which
-  must sit inside your project folder. Try the absolute path first — if that
-  works, fix the relative one.
-- **Starts by hand?** Run the app's command yourself, with no input. It must
-  paint its first screen on its own; if it waits for input before painting,
-  add that input to your suite's `setup`.
-- **Terminal type.** Keep `TERM=xterm-256color` (the `tuilab.yaml` default)
-  unless your app documents a different requirement.
+- **Unknown field.** Suites are strict (`tui-lab/v1`, unknown fields
+  denied). A typo like `wait_for` or an invented step fails at parse time —
+  check the step reference in Writing tests.
+- **Bad duration.** Durations are human strings: `500ms`, `3s`, `2m` — a
+  bare number means milliseconds. `10sec` is an error.
+- **Missing config file is fine.** A absent `tuilab.yaml` means defaults;
+  only a *malformed* one is an error. The error message names the file and
+  the offending line.
 
 </StepBlock>
 
-<StepBlock step={3} title="Hangs and timeouts" tag="exit 4">
+<StepBlock step={3} title="The app won't launch" tag="exit 3">
+
+<StepDescription>The engine couldn't start your app at all. Check these in order:</StepDescription>
+
+- **Command path.** Relative paths in your suite resolve from the directory
+  where you ran `tuilab`. Try the absolute path first — if that works, fix
+  the relative one.
+- **Starts by hand?** Run the app's command yourself, with no input. It must
+  paint its first screen on its own; if it waits for input before painting,
+  add that input to your suite's `setup`.
+- **MCP launch rejected with `FORBIDDEN_COMMAND`?** The command must match
+  `security.allow_commands` in `tuilab.yaml`, and `cwd` must sit under the
+  project root.
+
+</StepBlock>
+
+<StepBlock step={4} title="Hangs and timeouts" tag="exit 4">
 
 <StepDescription>The app started but never painted the waited text. Three usual causes:</StepDescription>
 
 1.  **Missing wait.** Every `press`/`type` that changes the screen needs a
     `wait_for_text` after it. Await the *next* screen, not the current one.
 2.  **Too-tight timeout.** Be generous on launch and first paint (5–10s),
-    strict on steady-state steps (1–2s). Tune per step with `timeout:`.
+    strict on steady-state steps (1–2s). Tune per step with `timeout:`; the
+    suite default comes from `default_timeout` in `tuilab.yaml`.
 3.  **Wrong terminal size.** Some apps redraw or paginate at 80x24 vs 120x40.
-    Match `default_terminal` to how you run the app by hand.
+    Match `default_terminal` to how you run the app by hand, or sweep sizes
+    with `--resize-matrix 80x24,120x40`.
+
+A `terminal.timeout` in the suite kills genuinely hung runs as an
+infra error (exit 4) — distinct from a failing budget, which is an ordinary
+test failure.
 
 </StepBlock>
-
-<StepBlock step={4} title="Flaky snapshots" tag="exit 1, sometimes">
-
-<StepDescription>Passes sometimes, fails sometimes, nothing changed? Volatile content leaked into a golden.</StepDescription>
-
-Mask everything that moves between runs — clocks, PIDs, durations, random
-IDs — with `mask:` rules (see Assertions & snapshots). Re-run three times;
-if all three pass, the flake is dead.
-
-</StepBlock>
-
-## Reports and failure bundles
-
-When text assertions fail (exit 1 with the app running fine), don't re-run
-blind — read the evidence. Every failure captures screens, input history,
-and snapshot diffs:
-
-<Snippet label="bash" code={`# Step 1: read the structured failure
-tuilab debug reports/results.json
-
-# Step 2: open the visual diff
-tuilab report --format html`} />
-
-The HTML report shows the expected vs actual screens side by side; `debug`
-prints the same bundle as text for terminals and agent loops.
 
 ## Windows tips
 
@@ -93,7 +134,7 @@ prints the same bundle as text for terminals and agent loops.
 
 ## Still stuck?
 
-- **MCP launch rejected?** The command must match `security.allow_commands`
-  in `tuilab.yaml`, and `cwd` must sit under the project root.
+- **MCP sessions vanish?** Idle sessions are reaped after 60s and the cap is
+  8 concurrent — the next `tui_launch` reaps orphans first.
 - Open an issue at `github.com/soubhagya2001/TUI-Lab` with your suite file,
   the exit code, and `reports/results.json` attached.

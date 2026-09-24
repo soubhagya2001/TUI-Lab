@@ -6,50 +6,218 @@ import { Example } from '../components/example';
 
 Prefer code over YAML? The SDKs wrap the same engine in your language's
 idioms — sessions as objects, waits as awaited calls, failures as
-exceptions. One rule governs all three: **SDKs are thin wrappers**. No native
-PTY code — each SDK spawns the `tuilab` engine and speaks the `tuilab proto`
-JSON-lines wire contract (one action in, one reply out). Versions move in
-lockstep with the engine, so upgrade engine and SDK together.
+exceptions. One rule governs all three: **SDKs are thin wrappers**. No
+native PTY code — each SDK spawns the `tuilab` engine (`tuilab proto`
+JSON-lines mode: one action in, one reply out) and shares its behavior with
+CLI and MCP. Versions move in lockstep with the engine, so upgrade engine
+and SDK together.
 
-<Snippet label="bash" code={`pip install tui-lab        # Python
-npm i @tui-lab/sdk       # JavaScript / TypeScript
-# Rust: add tui-lab-sdk to Cargo.toml`} />
+<Snippet label="bash" code={`pip install tui-lab          # Python (bundles the engine)
+npm i @tui-lab/sdk           # JavaScript / TypeScript (bundles the engine)
+cargo add tui-lab-sdk        # Rust (install the engine separately)`} />
+
+## Session API
+
+Every SDK exposes the same surface — launch, interact, assert, close:
+
+| Method | Python | JavaScript | Rust |
+|--------|--------|------------|------|
+| Launch | `await TuiTest.launch(command=…, width=…, height=…)` | `await TuiTest.launch(cmd, opts)` | `TuiTest::launch(cmd, LaunchOptions)` |
+| Press a key | `await tui.press("ENTER", delay_ms=100)` | `await tui.press("ENTER", 100)` | `tui.press_delayed("ENTER", Some(100))` |
+| Type text | `await tui.type("table", sensitive=True)` | `await tui.type("table", true)` | `tui.type_text("table", false)` |
+| Wait for text | `await tui.expect_text("Dashboard", timeout_ms=5000)` | `await tui.expectText("Dashboard", 5000)` | `tui.expect_text("Dashboard", 5_000, false, None)` |
+| Expect absent | `await tui.expect_not_text("panic")` | `await tui.expectNotText("panic")` | `tui.expect_not_text("panic")` |
+| Read screen | `await tui.screen(styled=True, tree=True)` | `await tui.screen(true, true)` | `tui.screen(false, false)` |
+| Assert condition | `await tui.assert_({"type": "exit_code", "code": 0})` | `await tui.assert({ type: "exit_code", code: 0 })` | `tui.assert(json!({...}))` |
+| Snapshot | `await tui.snapshot("dashboard")` | `await tui.snapshot("dashboard")` | `tui.snapshot("dashboard")` |
+| Resize | `await tui.resize(80, 24)` | `await tui.resize(80, 24)` | `tui.resize(80, 24)` |
+| Close | `await tui.close(quit="q")` | `await tui.close("q")` | `tui.close(Some("q"), None)` |
+
+The raw `assert` accepts the full engine condition vocabulary
+(`text_visible`, `text_not_visible`, `text_regex`, `exact_text`,
+`cursor_position`, `screen_changed`, `exit_code`, `not_crashed`, `crashed`,
+`role`) and returns `{ passed, detail }` — it never raises on a failed
+assertion, only on transport errors.
 
 <Example title="Same flow, three languages" description="Launch an app, wait for each screen, assert, and close — pick your tab.">
 
 <CodeTabs tabs={[
   {
     label: 'Python', value: 'python', content:
-    <Snippet label="python" code={`from tuilab import TuiTest
+    <Snippet label="python" code={`import asyncio
+from tuilab import TuiTest
 
-with TuiTest("./myapp") as t:
-    t.wait_for_text("Main Menu", timeout=5)
-    t.press("ENTER")
-    t.wait_for_text("Dashboard")
-    t.assert_text(contains="Dashboard")`} />,
+async def main():
+    tui = await TuiTest.launch(command="./myapp", width=120, height=40)
+    try:
+        await tui.expect_text("Main Menu", timeout_ms=5_000)
+        await tui.press("ENTER")
+        await tui.expect_text("Dashboard")
+        await tui.type("s3cret", sensitive=True)   # redacted from logs
+        screen = await tui.screen(styled=True)     # cells with fg/bg/style
+        print(screen["cursor"], screen["width"])
+    finally:
+        await tui.close(quit="q")
+
+asyncio.run(main())`} />,
   },
   {
     label: 'JavaScript', value: 'js', content:
     <Snippet label="typescript" code={`import { TuiTest } from "@tui-lab/sdk";
 
-using t = await TuiTest.launch("./myapp");
-await t.waitForText("Main Menu", { timeout: 5000 });
-await t.press("ENTER");
-await t.waitForText("Dashboard");
-await t.assertText({ contains: "Dashboard" });`} />,
+const tui = await TuiTest.launch("./myapp", { width: 120, height: 40 });
+try {
+  await tui.expectText("Main Menu", 5000);
+  await tui.press("ENTER");
+  await tui.expectText("Dashboard");
+  await tui.type("s3cret", true);                  // redacted from logs
+  const screen = await tui.screen(true);           // styled cells
+  console.log(screen.cursor, screen.width);
+} finally {
+  await tui.close("q");
+}`} />,
   },
   {
     label: 'Rust', value: 'rust', content:
-    <Snippet label="rust" code={`use tui_lab_sdk::TuiTest;
+    <Snippet label="rust" code={`use tui_lab_sdk::{LaunchOptions, TuiTest};
 
-let t = TuiTest::launch("./myapp").await?;
-t.wait_for_text("Main Menu", Duration::from_secs(5)).await?;
-t.press("ENTER").await?;
-t.wait_for_text("Dashboard", Duration::from_secs(5)).await?;
-t.assert_text_contains("Dashboard").await?;`} />,
+#[tokio::main]
+async fn main() -> Result<(), tui_lab_sdk::TuiLabError> {
+    let mut tui = TuiTest::launch("./myapp", LaunchOptions::new()).await?;
+    tui.expect_text("Main Menu", 5_000, false, None).await?;
+    tui.press("ENTER").await?;
+    tui.expect_text("Dashboard", 10_000, false, None).await?;
+    tui.type_text("s3cret", true).await?;          // redacted from logs
+    let screen = tui.screen(true, false).await?;   // styled cells
+    println!("{}", screen);
+    tui.close(Some("q"), None).await?;
+    Ok(())
+}`} />,
   },
 ]} />
 
 </Example>
 
-<Callout title="Engine included">The `pip`/`uv` and `npm` installs bundle the engine, so the SDKs work out of the box. Rust users: install the engine first (`cargo install tui-lab-cli` or another installer) or point `TUILAB_BIN` at it.</Callout>
+## Running YAML suites from code
+
+YAML remains the canonical format — every SDK can shell a full suite run
+and read the parsed results:
+
+<CodeTabs tabs={[
+  {
+    label: 'Python', value: 'python', content:
+    <Snippet label="python" code={`from tuilab import Runner
+
+results = await Runner.run("tests/e2e/search_flow.yaml")
+# raises on infra failures (exit codes 2-4); returns parsed
+# reports/results.json entries with steps, timings, and failures`} />,
+  },
+  {
+    label: 'JavaScript', value: 'js', content:
+    <Snippet label="typescript" code={`import { Runner } from "@tui-lab/sdk";
+
+const results = await Runner.run("tests/e2e/search_flow.yaml");
+// throws on infra failures (exit codes 2-4); returns parsed
+// reports/results.json entries with steps, timings, and failures`} />,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <Snippet label="rust" code={`use std::path::Path;
+use tui_lab_sdk::Runner;
+
+let results = Runner::run(Path::new("tests/e2e/search_flow.yaml"), None).await?;
+// Err on infra failures (exit codes 2-4); Ok with parsed
+// reports/results.json entries otherwise`} />,
+  },
+]} />
+
+## Isolating parallel runs
+
+Every run writes `reports/` relative to the working directory, so two
+concurrent runs in one CWD overwrite each other's results. Give each run its
+own directory — it flows through as `tuilab run --output-dir`:
+
+<CodeTabs tabs={[
+  {
+    label: 'Python', value: 'python', content:
+    <Snippet label="python" code={`results = await Runner.run("tests/search.yaml",
+                                         reports_dir="reports/search")`} />,
+  },
+  {
+    label: 'JavaScript', value: 'js', content:
+    <Snippet label="typescript" code={`const results = await Runner.run(
+  "tests/search.yaml",
+  undefined,          // binary override
+  "reports/search",   // isolated report directory
+);`} />,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <Snippet label="rust" code={`let results = Runner::run_with_reports_dir(
+    Path::new("tests/search.yaml"),
+    None,                     // binary override
+    Some(Path::new("reports/search")),
+).await?;`} />,
+  },
+]} />
+
+## Sessions never leak
+
+`close` is the graceful path (optional quit bytes, bounded wait, then kill)
+and it is idempotent — a second call is a no-op, never a hang. Forgetting it
+is still safe: every SDK kills a forgotten sidecar on drop, and the engine
+reaps the app under test with it.
+
+<CodeTabs tabs={[
+  {
+    label: 'Python', value: 'python', content:
+    <Snippet label="python" code={`async with await TuiTest.launch(command="./myapp") as tui:
+    await tui.expect_text("Dashboard")
+# closed on exit; dropping a session without close also reaps it`} />,
+  },
+  {
+    label: 'JavaScript', value: 'js', content:
+    <Snippet label="typescript" code={`{
+  await using tui = await TuiTest.launch("./myapp");
+  await tui.expectText("Dashboard");
+} // closes on scope exit (Symbol.asyncDispose)`} />,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <Snippet label="rust" code={`{
+    let tui = TuiTest::launch("./myapp", LaunchOptions::new()).await?;
+    tui.expect_text("Dashboard", 5_000, false, None).await?;
+    tui.close(Some("q"), None).await?;   // drop alone also reaps
+}`} />,
+  },
+]} />
+
+## Engine binary resolution
+
+The sidecar binary is resolved per SDK, and every order ends in a PATH
+lookup last so an installed `tuilab` launcher can never be mistaken for the
+engine:
+
+- **Python / JavaScript:** explicit `binary` argument → `TUILAB_BIN` env →
+  the engine bundled with the install (wheel `_bin/` / `@tui-lab/cli`
+  platform package) → workspace `target/debug` → `PATH`.
+- **Rust:** explicit argument → `TUILAB_BIN` env → workspace `target/debug`
+  → `PATH`. (cargo consumers install the engine separately, so there is no
+  bundled-package step.)
+
+Engine errors surface as typed exceptions (`TuiLabError`) carrying the
+engine's reply; `type(..., sensitive=True)` never logs the text in any SDK.
+
+<Callout title="Engine included">The `pip`/`uv` and `npm` installs bundle the engine, so the SDKs work
+out of the box. Rust users: install the engine first (`cargo install
+tui-lab-cli` or another installer) or point `TUILAB_BIN` at it.</Callout>
+
+## Under the wire
+
+Curious what the SDKs actually send? `tuilab proto` speaks one JSON action
+per stdin line — `{"action": "launch", ...}`, `{"action": "press",
+"session_id": …, "key": "ENTER"}` — and one reply per stdout line:
+`{"ok": true, …}` or `{"ok": false, "error": "…"}`. The nine actions
+(`launch`, `press`, `type`, `wait_for_text`, `screen`, `assert`,
+`snapshot`, `resize`, `close`) are pinned by an engine round-trip test, so
+an engine change that would break SDKs fails CI first.

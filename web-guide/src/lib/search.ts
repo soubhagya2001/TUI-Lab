@@ -24,22 +24,27 @@ const CORPUS: StoredEntry[] = [
   {
     path: '/writing-tests',
     title: 'Writing tests',
-    text: 'YAML DSL steps launch press type wait_for_text screen assert snapshot resize close session',
+    text: 'YAML DSL steps press type wait_for_text resize assert_text assert_region snapshot wait_for_exit keys mouse click scroll ctrl alt fkeys timing key_delay input_delay tags skip focus budgets attachments',
   },
   {
     path: '/assertions-snapshots',
     title: 'Assertions & snapshots',
-    text: 'assert taxonomy contains matches snapshot golden masking deterministic retry timeout poll',
+    text: 'assert taxonomy contains not_contains regex exact_text cursor exit_code crashed screen_changed role button textinput checkbox a11y accessibility tree snapshot golden styled cells sixel masking region deterministic retry timeout poll',
   },
   {
     path: '/recorder',
     title: 'Recorder',
-    text: 'record capture replay smart waits codegen driven emit YAML',
+    text: 'record capture replay smart waits codegen driven emit YAML target python js rust mouse click synthesis',
+  },
+  {
+    path: '/recipes',
+    title: 'Recipes',
+    text: 'copy paste recipes examples search flow golden approval mask new file budgets startup step suite CI shard matrix artifacts upload parallel output-dir reports_dir isolation flaky retries history waterfall waterfall timing replay heisenbug role button assert_region cleanup wait_for_text a11y',
   },
   {
     path: '/cli-reference',
     title: 'CLI reference',
-    text: 'init run record report debug step proto flags parallel tuilab.yaml exit codes CI',
+    text: 'init run record report trace proto flags parallel tags shard retries resize-matrix step debug terminal tuilab.yaml exit codes CI junit html history flaky artifacts',
   },
   {
     path: '/mcp-agents',
@@ -49,12 +54,12 @@ const CORPUS: StoredEntry[] = [
   {
     path: '/sdks',
     title: 'SDKs',
-    text: 'Python JavaScript TypeScript Rust sidecar proto JSON-lines pytest node:test tokio',
+    text: 'Python JavaScript TypeScript Rust sidecar proto JSON-lines TuiTest Runner expect_text expectNotText press type snapshot resize close TUILAB_BIN binary resolution pytest node:test tokio',
   },
   {
     path: '/troubleshooting',
     title: 'Troubleshooting',
-    text: 'install not found engine hang timeout flaky snapshot mask reports HTML debug failure bundle Windows ConPTY FAQ help',
+    text: 'install not found engine hang timeout flaky snapshot mask reports HTML junit trace replay failure bundle debug retries Windows ConPTY FORBIDDEN_COMMAND exit codes FAQ help',
   },
 ]
 

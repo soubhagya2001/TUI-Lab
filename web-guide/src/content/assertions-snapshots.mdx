@@ -4,54 +4,132 @@ import { Example } from '../components/example';
 
 # Assertions & snapshots
 
-Assertions are how a suite says "this screen is correct". TUI Lab checks
-text, screen regions, cursor position, timing, and process health — plus
-full-screen golden snapshots with masking for volatile content. Everything
-below polls with timeout + retry, so assertions wait for the app instead of
-racing it.
+Assertions run against **terminal state** — the rendered grid, cursor, and
+process — not raw bytes. Everything below polls with timeout + retry
+(defaults: 10s timeout, 25–50ms poll), so assertions wait for the app
+instead of racing it.
 
-Every assertion below is a YAML fragment you can drop into a suite's `steps` or `assertions`. Each carries a timeout with polling + retry.
+## `assert_text` — the full field list
 
-## Assertion snippets
+One `assert_text` (alias: `expect`) step can combine any of these fields;
+all listed checks must hold. Add `timeout: 2s` to any of them to poll until
+the checks pass (or the timeout elapses).
 
-Text — does the screen show it?
+| Field | Meaning |
+|-------|---------|
+| `contains` | Text visible somewhere on screen |
+| `not_contains` | Text must be absent (e.g. `"Unhandled panic"`) |
+| `regex` | Regular expression that must match the screen |
+| `exact_text` | Whole screen (trimmed) equals this text |
+| `cursor` | Cursor at zero-based `{ row, col }` |
+| `exit_code` | Process exited with this code |
+| `not_crashed` | `true` = process healthy; `false` = process must have crashed |
+| `screen_changed` | `true`/`false` — screen changed since the previous step |
+| `role` + `name` | A heuristic widget exists (see accessibility tree below) |
+| `timeout` | Poll until all checks hold |
+
+<Example title="Combining checks" description="One step, several conditions — all must hold, with polling:">
 
 <Snippet label="yaml" code={`- assert_text:
     contains: "Dashboard"
-- assert:
-    text_visible: "Dashboard"`} />
+    not_contains: "Unhandled panic"
+    regex: "CPU: \\\\d+%"
+    timeout: 2s
 
-Screen behavior — did the screen change, and did the app start fast?
-
-<Snippet label="yaml" code={`- expect:
-    screen_changed: true
-- expect:
-    startup_time_less_than: 2s`} />
-
-Regions — scope a check to part of the screen:
-
-<Snippet label="yaml" code={`- assert_region:
-    x: 0
-    y: 0
-    width: 80
-    height: 5
-    contains: "CodeGraph"`} />
-
-Cursor and process — where is the cursor, and did the app exit cleanly?
-
-<Snippet label="yaml" code={`assertions:
-  - cursor_position:
+- assert_text:
+    cursor:
       row: 3
       col: 10
-- assert_exit_code: 0
-- assert_process_not_crashed: true`} />
 
-## Snapshots (two kinds)
+- assert_text:
+    exit_code: 0
+    not_crashed: true
 
-- **Golden snapshots** — full-screen text compared against a stored file. First run writes the golden; later runs diff.
-- **Masked snapshots** — volatile regions (timestamps, CPU/RAM, IDs) declared with `region:` masks so goldens stay deterministic. Two layers, applied in order: `region:` entries (`region:rect:X,Y,W,H`, `region:top:N`, `region:bottom:N`) blank rectangles first, then `regex:` entries replace volatile spans.
+- assert_text:
+    screen_changed: true`} />
 
-<Example title="Suite with a masked snapshot" description="The clock and status line change every run, so a regex plus a bottom-row mask blanks them — everything else must match exactly.">
+</Example>
+
+## Regions — scope a check to part of the screen
+
+<Snippet label="yaml" code={`- assert_region:
+    x: 0        # 0-based column
+    y: 0        # 0-based row
+    width: 80   # cells
+    height: 5   # rows
+    contains: "CodeGraph"`} />
+
+Out-of-bounds regions fail with the actual grid size named — not a
+misleading empty mismatch. Wide characters (CJK, emoji) occupy two cells
+but read as one character.
+
+## Accessibility roles (heuristic widgets)
+
+The engine infers widgets from widespread TUI conventions — no app
+cooperation needed: `[ Submit ]` and `< Cancel >` are **buttons**,
+`Search: ___` is a **textinput**, `[x] Remember me` is a **checkbox**.
+
+<Snippet label="yaml" code={`- assert_text:
+    role: button      # button | textinput | checkbox
+    name: submit      # case-insensitive substring; omit to match any
+    timeout: 2s`} />
+
+Custom-drawn widgets that ignore these conventions are invisible to the
+tree — a documented limitation, not an error.
+
+## Process health
+
+End-of-suite `assertions:` accept two keys:
+
+<Snippet label="yaml" code={`assertions:
+  - exit_code: 0                    # or: assert_exit_code: 0
+  - process_not_crashed: true       # or: assert_process_not_crashed: true`} />
+
+Only signal deaths count as crashed — nonzero exit codes are preserved
+numerically so `exit_code: 2` stays assertable.
+
+## Snapshots (three modes)
+
+`snapshot` (alias: `screenshot`) compares the screen against a stored
+golden. The first run writes the golden and **fails on purpose** so approval
+is always explicit:
+
+<Snippet label="yaml" code={`- snapshot:
+    name: dashboard
+- snapshot:
+    name: dashboard-styled
+    styled: true          # compare colors, bold, underline, reverse too
+- snapshot:
+    name: image
+    graphics: true        # compare captured Sixel graphics payloads`} />
+
+Goldens live size-scoped so different terminal sizes never collide:
+
+```
+tests/snapshots/
+  dashboard/
+    dashboard/
+      120x40.txt           # text (default)
+      120x40.cells.json    # styled: true
+      120x40.sixel.json    # graphics: true
+```
+
+First run: `new golden written to tests/snapshots/…​.new — approve and
+re-run`. Review the `.new` file, and if it is right, replace the golden
+with it (`mv`, keep the original extension) and re-run. Committed goldens
+diff like code.
+
+<Callout title="Masks apply to text snapshots only">Styled and graphics snapshots compare exactly. Mask volatile content with a
+plain text snapshot, or keep styled goldens to screens that never change.</Callout>
+
+## Masking volatile content
+
+Time, CPU%, PIDs, random IDs, and spinners must be masked or every golden
+is a flaky test. Two mask layers apply **in order**: `region:` entries
+blank rectangles to spaces first (positions stay stable, diffs stay
+readable), then regex entries replace volatile spans with `<masked>`.
+
+<Example title="Suite with a masked snapshot" description="The clock changes every run, so a regex plus a bottom-row mask blanks them — everything else must match exactly.">
 
 <Snippet label="tests/dashboard.yaml" code={`schema: tui-lab/v1
 name: Dashboard snapshot
@@ -65,15 +143,19 @@ steps:
   - snapshot:
       name: dashboard
       mask:
-        - regex: "\\\\d{2}:\\\\d{2}:\\\\d{2}"
-        - region:bottom:1
-cleanup:
-  - press: q`} />
+        - regex: "\\\\d{2}:\\\\d{2}:\\\\d{2}"   # 12:34:56 → <masked>
+        - region:bottom:1                 # blank the last row
+        # - region:top:2                  # blank the first two rows
+        # - region:rect:0,38,120,2        # blank x=0,y=38 120x2`} />
 
 </Example>
 
-<Callout title="Mask everything volatile">Time, PIDs, durations, and random IDs must be maskable. An unmasked golden is a flaky test waiting to happen.</Callout>
-
 ## Timing / retry semantics
 
-Every wait and assertion carries a timeout with polling + retry. Tune per step with `timeout:` — generous on launch and first paint, tight on steady-state interactions.
+- Every wait and assertion polls (`timeout` per step; suite default from
+  `default_timeout` in `tuilab.yaml`). Timeouts return on first match, so a
+  generous default only costs time on genuine failures.
+- Anti-pattern: `press ENTER` → immediate assert. Correct: `press ENTER` →
+  `wait_for_text` → assert.
+- On timeout the failure records the last screen, elapsed time, and step
+  index — that evidence feeds the failure bundle (see Troubleshooting).

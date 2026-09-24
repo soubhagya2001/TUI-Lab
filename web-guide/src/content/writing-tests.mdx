@@ -10,50 +10,146 @@ file runs from the CLI (`tuilab run`), from an agent over MCP
 names the app to launch, the steps to perform, and the assertions that must
 hold; the engine handles PTYs, timing, and cleanup.
 
+## Suite anatomy
+
 <Example title="Minimal suite" description="Launches any terminal app, waits for each screen, asserts, and quits cleanly.">
 
-<Snippet label="tests/navigation.yaml" code={`schema: tui-lab/v1
-name: Navigation Test
+<Snippet label="tests/navigation.yaml" code={`schema: tui-lab/v1        # required — must be tui-lab/v1
+name: Navigation Test    # suite name shown in reports
 application:
-  command: "./myapp"
-  args: []
-  cwd: .
-environment:
+  command: "./myapp"     # executable to launch under a PTY
+  args: ["--verbose"]    # optional CLI arguments
+  cwd: .                 # optional working directory
+environment:             # optional extra env for the child
   TERM: xterm-256color
 terminal:
-  width: 120
-  height: 40
-setup:
-  - wait_for_text: "Main Menu"
-    timeout: 5s
-steps:
+  width: 120             # columns (default 120)
+  height: 40             # rows (default 40)
+  timeout: 2m            # optional suite timeout — hung runs die as infra errors (exit 4)
+setup:                   # optional — runs before steps
+  - wait_for_text:
+      text: "Main Menu"
+      timeout: 5s
+steps:                   # the main flow
   - press: ENTER
   - wait_for_text: "Dashboard"
   - assert_text:
       contains: "Dashboard"
-cleanup:
+cleanup:                 # optional — ALWAYS runs, even after a failure
   - press: q
-assertions:
+assertions:              # end-of-suite process checks
   - exit_code: 0`} />
 
 </Example>
 
+Every field above is optional except `schema`, `name`, `application`, and
+`steps`. Durations read as human strings — `500ms`, `3s`, `2m` — and a bare
+number means milliseconds. Unknown fields are rejected (strict v1), so
+typos fail fast at parse time before anything launches.
+
 ## Step reference (v1)
 
-| Step | Purpose |
-|------|---------|
-| `launch` | Start the app (usually implicit in `application`) |
-| `press` | Send a key (`ENTER`, `q`, `CTRL+C`, arrows, F-keys) |
-| `type` | Type literal text (use `sensitive: true` for secrets — redacted from logs) |
-| `wait_for_text` | Poll the screen until text appears (timeout + retry — **never `sleep`**) |
-| `screen` | Capture the current screen for inspection |
-| `assert` | Check text, cursor, screen-change, or startup-time conditions |
-| `snapshot` | Compare against (or record) a golden snapshot |
-| `resize` | Resize the terminal mid-test |
-| `close` | Close the session and check the exit code |
+These are the only valid step keys. (`screen`, `close`, and `launch` are
+JSON-protocol actions used by MCP/SDKs — they are **not** YAML steps; the
+YAML runner launches from `application:` and closes automatically.)
 
-## The golden rule: sync via waits
+| Step | Shape | Notes |
+|------|-------|-------|
+| `press` | `"ENTER"` or `{ key, delay }` | Named keys, `CTRL+x`, `ALT+x`, single chars, mouse actions |
+| `type` | `"search text"` or `{ text, delay }` | Verbatim typing — no Enter appended unless you include it |
+| `wait_for_text` | `{ text, timeout?, regex? }` | Polling wait — **always prefer over `sleep`** |
+| `sleep` | `"500ms"` | Escape hatch only; the recorder never emits it |
+| `resize` | `{ width, height }` | e.g. 80x24 — redraw is async, follow with `wait_for_text` |
+| `assert_text` | `{ contains?, not_contains?, regex?, exact_text?, cursor?, exit_code?, not_crashed?, screen_changed?, role?, name?, timeout? }` | Full taxonomy below; alias: `expect` |
+| `assert_region` | `{ x, y, width, height, contains }` | Cell-scoped check inside a rectangle (0-based cells) |
+| `snapshot` | `{ name, mask?, styled?, graphics? }` | Golden-file compare (see Assertions & snapshots); alias: `screenshot` |
+| `wait_for_exit` | `{ timeout }` | For quit flows — process must exit within the timeout |
 
-Every interaction that changes the screen must be followed by `wait_for_text`, not a fixed delay. Waits poll with timeout + retry, so suites stay fast on quick machines and stable on slower ones.
+## Keys you can press
 
-<Callout title="Windows tip" tone="warning">On Windows, key handling and resize behave slightly differently than on Unix. If a suite passes on one OS but not the other, the Troubleshooting chapter lists the usual suspects.</Callout>
+Named keys (case-insensitive): `ENTER` `ESC` `TAB` `BACKTAB` `UP` `DOWN`
+`LEFT` `RIGHT` `HOME` `END` `PGUP` `PGDN` `INSERT` `DELETE` `F1`–`F12`,
+plus chords `CTRL+C` / `CTRL+A`… and `ALT+x`. A single character (`q`, `/`)
+is sent literally.
+
+Mouse actions are written as key names with 1-based cell coordinates:
+
+<Snippet label="yaml" code={`- press: "CLICK 40 12"        # left click at column 40, row 12
+- press: "RIGHT_CLICK 10 3"   # right click
+- press: "SCROLL_DOWN 40 12"  # scroll wheel
+- press: "RELEASE 40 12"      # release (drag = CLICK … then RELEASE as separate steps)`} />
+
+<Callout title="Drag is two steps">Gestures travel as separate writes — a `CLICK` step followed by a
+`RELEASE` step — exactly how real event streams arrive. There is no
+single-blob `DRAG` step.</Callout>
+
+## Sync via waits, never sleeps
+
+TUI redraw is asynchronous. Every `press`/`type` that changes the screen
+must be followed by `wait_for_text` — waits poll with timeout + retry, so
+suites stay fast on quick machines and stable on slower ones.
+
+<Snippet label="yaml" code={`- press: "/"
+- type: "table"
+- press: ENTER
+- wait_for_text: "Search Results"   # await the NEXT screen, not the current one
+- wait_for_text:
+    text: "row \\\\d+"               # regex mode
+    regex: true
+    timeout: 3s`} />
+
+## Pacing input (timing)
+
+Optional suite-level `timing:` sets default pacing for the whole suite
+(absent/zero keeps the historic write-as-one-burst behavior):
+
+<Snippet label="yaml" code={`timing:
+  key_delay: 40ms    # gap between characters inside a type step
+  input_delay: 10ms  # delay before each press/type write hits the PTY
+steps:
+  - press: { key: DOWN, delay: 100ms }   # overrides input_delay
+  - type: { text: hello, delay: 50ms }   # overrides key_delay`} />
+
+The two knobs stay independent: a `press` step's `delay` is the pause before
+that write, while a `type` step's `delay` is only the gap between
+characters — the pause before typed text still comes from
+`timing.input_delay`. Pacing matters for apps that read input line-by-line
+or debounce keystrokes. Every write is recorded as a timed input beat for
+trace replay (see CLI reference → Trace viewer).
+
+## Selecting suites: tags, skip, focus
+
+Suites carry optional selection metadata:
+
+<Snippet label="yaml" code={`tags: [smoke, login]   # --tags smoke runs suites carrying any listed tag
+skip: true             # always reported as skipped, never fails
+focus: true            # when any collected suite is focused, only focused run`} />
+
+Drive them from the CLI with `--tags smoke`, `--shard 1/3`, and `--retries 2`
+(see CLI reference). Skipped suites show as `○` in output and count
+separately in reports.
+
+## Performance budgets (opt-in)
+
+<Snippet label="yaml" code={`budgets:
+  step: 2s      # every step must complete within this
+  suite: 60s    # the whole run must complete within this
+  startup: 3s   # spawn-to-first-content must complete within this`} />
+
+Absent budgets never fail. Violations are ordinary test failures with
+evidence — a slow suite is a result, not a broken harness (unlike
+`terminal.timeout`, which kills hung runs as infra errors).
+
+## Attachments (extra report files)
+
+List files and they are copied into `reports/attachments/<suite>/` after the
+run and linked from the HTML report. Paths resolve relative to the suite
+file; missing files warn and skip — they never fail the run.
+
+<Snippet label="yaml" code={`attachments:
+  - ./expected-output.txt
+  - ../fixtures/sample-data.json`} />
+
+<Callout title="Windows tip" tone="warning">On Windows (ConPTY), key handling and resize behave slightly
+differently than on Unix. If a suite passes on one OS but not the other,
+the Troubleshooting chapter lists the usual suspects.</Callout>

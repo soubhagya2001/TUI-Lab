@@ -10,6 +10,7 @@ import AssertionsSnapshots from '@/content/assertions-snapshots.mdx'
 import CliReference from '@/content/cli-reference.mdx'
 import GettingStarted from '@/content/getting-started.mdx'
 import McpAgents from '@/content/mcp-agents.mdx'
+import Recipes from '@/content/recipes.mdx'
 import Recorder from '@/content/recorder.mdx'
 import Sdks from '@/content/sdks.mdx'
 import Troubleshooting from '@/content/troubleshooting.mdx'
@@ -20,6 +21,7 @@ const CHAPTERS: Record<string, React.ComponentType> = {
   '/writing-tests': WritingTests,
   '/assertions-snapshots': AssertionsSnapshots,
   '/recorder': Recorder,
+  '/recipes': Recipes,
   '/cli-reference': CliReference,
   '/mcp-agents': McpAgents,
   '/sdks': Sdks,

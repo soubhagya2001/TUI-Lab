@@ -1,0 +1,238 @@
+import { Callout, CodeTabs } from '../components/callout-code-tabs';
+import { Snippet, OutputBlock } from '../components/code-block';
+import { Example } from '../components/example';
+
+# Recipes
+
+Copy-paste patterns for the jobs every TUI project ends up doing: writing a
+real suite, approving goldens, targeting widgets, guarding performance,
+splitting CI, reproducing timing bugs, isolating parallel runs, and chasing
+flakes. Each recipe stands alone — read the one you need.
+
+## 1. A real suite: search and filter
+
+The canonical flow most TUIs share — boot, type a filter, check the result
+row, quit cleanly. Note the discipline: every input that changes the screen
+is followed by a `wait_for_text`, and `cleanup` always runs.
+
+<Example title="tests/search_flow.yaml" description="Type a filter, assert the matching row, quit.">
+
+<Snippet label="tests/search_flow.yaml" code={`schema: tui-lab/v1
+name: Search flow
+application:
+  command: "./myapp"
+terminal:
+  width: 120
+  height: 40
+setup:
+  - wait_for_text: "Main Menu"
+steps:
+  - press: "/"
+  - type: "table"
+  - wait_for_text: "Search Results"
+  - assert_region:                 # only the results pane, not the whole screen
+      x: 2
+      y: 3
+      width: 116
+      height: 20
+      contains: "alpha-table"
+  - assert_text:
+      not_contains: "No matches"  # the filter actually matched something
+  - press: q
+cleanup:
+  - press: q
+assertions:
+  - exit_code: 0`} />
+
+</Example>
+
+## 2. Goldens: mask, review, commit
+
+Snapshots fail on purpose the first time so approval stays explicit. Mask
+everything volatile *before* the first run, otherwise you approve a clock.
+
+<Snippet label="tests/dashboard.yaml" code={`steps:
+  - wait_for_text: "Dashboard"
+  - snapshot:
+      name: dashboard
+      mask:
+        - regex: "\\\\d{2}:\\\\d{2}:\\\\d{2}"   # 14:22:07 -> <masked>
+        - regex: "pid \\\\d+"
+        - region:bottom:1                        # blank a spinner/status row
+        # - region:top:2
+        # - region:rect:0,38,120,2               # x,y,w,h`} />
+
+<OutputBlock title="first run">
+
+new golden written to tests/snapshots/dashboard/dashboard/120x40.new — approve and re-run
+
+</OutputBlock>
+
+Review the `.new` file, replace the golden with it (same extension), and
+re-run — now it compares. Text goldens accept masks; `styled: true`
+(color/bold/underline/reverse) and `graphics: true` (Sixel payloads) compare
+exactly, so keep those on stable screens.
+
+<Snippet label="bash" code={`mv tests/snapshots/dashboard/dashboard/120x40.new \\
+   tests/snapshots/dashboard/dashboard/120x40.txt
+tuilab run tests/dashboard.yaml`} />
+
+## 3. Target widgets by role, not coordinates
+
+Pixel coordinates break the moment a layout shifts. When the app follows
+common TUI conventions, assert on the inferred role instead — `[ Submit ]`
+is a button, `Search: ___` is a textinput, `[x] Remember me` is a checkbox.
+
+<Snippet label="yaml" code={`- assert_text:
+    role: button       # button | textinput | checkbox
+    name: submit       # case-insensitive substring; omit to match any
+    timeout: 2s`} />
+
+From an agent (MCP) you can dump the tree first and pick a target from it:
+
+<Snippet label="json" code={`{ "action": "screen", "session_id": "sess_001", "tree": true }`} />
+
+<Callout title="Heuristic, not an accessibility API">Roles come from screen-text conventions, so custom-drawn
+widgets are invisible to the tree. That is a documented limit, not an error
+— fall back to `assert_region` there.</Callout>
+
+## 4. Guard performance with budgets
+
+Budgets turn "it got slower" into a red suite. They are opt-in: absent
+budgets never fail, and a violation is an ordinary test failure with
+evidence (not an infra error like `terminal.timeout`).
+
+<Snippet label="tests/perf.yaml" code={`budgets:
+  startup: 3s        # spawn to first screen content
+  step: 2s           # every individual step
+  suite: 60s         # the whole run
+steps:
+  - wait_for_text: "Dashboard"
+  - press: "/"       # a regression that adds 1s of debounce fails here
+  - wait_for_text: "Search Results"`} />
+
+## 5. Split a suite across CI machines
+
+`--shard N/M` runs the Nth 1-based slice; shards never overlap, and results
+reassemble in input order. Upload `reports/` per machine — the JUnit file is
+what most CI dashboards consume.
+
+<Snippet label=".github/workflows/tui.yml" code={`jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        shard: [1, 2]
+    runs-on: \${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release
+      - name: Run shard
+        run: tuilab run tests/ --shard \${{ matrix.shard }}/2 --retries 1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: tui-reports-\${{ matrix.os }}-\${{ matrix.shard }}
+          path: reports/`} />
+
+## 6. Reproduce a timing-sensitive bug
+
+Some apps only misbehave at human typing speed. Pace the input at the PTY
+layer (no app hooks, no virtual clock), then replay the exact keystroke
+timing from the trace archive.
+
+<Snippet label="tests/typing.yaml" code={`timing:
+  key_delay: 40ms    # gap between characters inside a type step
+  input_delay: 10ms  # pause before each press/type write hits the PTY
+steps:
+  - press: { key: "/", delay: 100ms }   # press delay = pause before that write
+  - type: { text: "table", delay: 50ms } # type delay = gap between characters`} />
+
+<Snippet label="bash" code={`# Replay the recorded input beats (gaps capped at 1s)
+tuilab trace reports/traces/search-flow.zip --replay-input
+
+# Or the raw output bytes, to see what the app painted
+tuilab trace reports/traces/search-flow.zip --replay`} />
+
+<Callout title="Two independent knobs">A `press` step's `delay` is the pause before that write. A
+`type` step's `delay` is only the gap between characters — the pause before
+typed text still comes from `timing.input_delay`. SDK and MCP `delay_ms`
+follow the same split.</Callout>
+
+## 7. Parallel runs without collisions
+
+Every run writes `reports/` relative to the working directory. Run two
+suites concurrently from one CWD and they overwrite each other's
+`results.json` — point each run at its own directory.
+
+<Snippet label="bash" code={`tuilab run tests/search.yaml --output-dir reports/search
+tuilab run tests/settings.yaml --output-dir reports/settings`} />
+
+The same isolation exists in the SDKs, passed straight through to the
+engine:
+
+<CodeTabs tabs={[
+  {
+    label: 'Python', value: 'python', content:
+    <Snippet label="python" code={`results = await Runner.run("tests/search.yaml",
+                                         reports_dir="reports/search")`} />,
+  },
+  {
+    label: 'JavaScript', value: 'js', content:
+    <Snippet label="typescript" code={`const results = await Runner.run(
+  "tests/search.yaml",
+  undefined,          // binary override
+  "reports/search",   // isolated report directory
+);`} />,
+  },
+  {
+    label: 'Rust', value: 'rust', content:
+    <Snippet label="rust" code={`let results = Runner::run_with_reports_dir(
+    Path::new("tests/search.yaml"),
+    None,                     // binary override
+    Some(Path::new("reports/search")),
+).await?;`} />,
+  },
+]} />
+
+## 8. Triage a flake
+
+Three moves, in order: mask the volatile content, then re-run to see whether
+the race is real, then lean on retries while you fix the root cause.
+
+<Snippet label="bash" code={`# 1. Does it reproduce? Three runs, no code change.
+tuilab run tests/search.yaml --retries 2
+
+# 2. What did the engine see when it broke?
+tuilab run tests/search.yaml --debug
+tuilab trace reports/traces/search-flow.zip
+
+# 3. Where has it been flaky?
+cat reports/history.jsonl | tail -20
+tuilab report --format html --out reports/index.html`} />
+
+The HTML report renders a step waterfall, snapshot diffs, attachment links,
+and a flaky-suites section computed from `reports/history.jsonl` — the same
+file CI artifacts carry. Two usual root causes: volatile text leaking into a
+golden (mask it), and an input not followed by a `wait_for_text` (add the
+wait, don't raise the timeout).
+
+## 9. Let an agent drive it
+
+When you do not want to hand-write YAML, connect `tuilab-mcp` and let the
+assistant run `tui_run_test` on a suite you already have — or drive the app
+interactively with `tui_launch` / `tui_press` / `tui_wait_for_text` while it
+investigates a failure.
+
+<Snippet label="prompt to paste" code={`Run tests/search_flow.yaml with TUI Lab. For any failure,
+open the retained trace and tell me which step broke, what the screen showed,
+and the smallest suite edit that fixes it.`} />
+
+Command allowlist, cwd jail, 8-session cap, and optional audit logging all
+apply — see MCP & AI agents.
+
+<Callout title="Sessions never leak">`close` is the graceful path in every SDK, and a forgotten
+session is still cleaned up: dropping the object kills the sidecar, which
+reaps the app under test with it. In JavaScript, `await using` closes on
+scope exit.</Callout>

@@ -42,27 +42,45 @@ tuilab --version`} />,
 
 <Callout title="Prefer uv?">`uv add tui-lab` works the same as pip, and `uvx tui-lab run …` runs without installing anything.</Callout>
 
+<Callout title="What you get">Every installer bundles both binaries: `tuilab` (the engine + CLI) and
+`tuilab-mcp` (the MCP server for AI agents). Check `tuilab-mcp --help` works
+too if you plan to connect an agent.</Callout>
+
 </StepBlock>
 
 <StepBlock step={2} title="Scaffold a project" tag="tuilab init">
 
-<StepDescription>Create `tuilab.yaml` plus a starter smoke suite.</StepDescription>
+<StepDescription>Create `tuilab.yaml` plus a starter smoke suite. The config file is
+optional — a missing file means defaults — but having one makes the project
+self-documenting.</StepDescription>
 
 <Snippet label="bash" code={`tuilab init
 # -> tuilab.yaml + tests/smoke.yaml`} />
 
-<Example title="Generated tuilab.yaml" description="Project settings created by init — edit paths, terminal size, and timeouts to taste.">
+<Example title="Generated tuilab.yaml" description="Project settings created by init — edit paths, terminal size, and timeouts to taste. Every key is optional.">
 
 <Snippet label="tuilab.yaml" code={`version: "1.0"
 tests_dir: tests
 snapshots_dir: tests/snapshots
 default_terminal: { width: 120, height: 40 }
 default_timeout: 10s
-report: { json: reports/results.json, html: reports/index.html, junit: reports/junit.xml }
+parallel: 4
+report:
+  json: reports/results.json
+  junit: reports/junit.xml
+  html: reports/index.html
 env:
-  TERM: xterm-256color`} />
+  TERM: xterm-256color
+security:
+  allow_commands:      # MCP launch allowlist (regexes)
+    - "^\\\\./.*"
+    - "^cargo run.*"
+    - "^python.*"`} />
 
 </Example>
+
+<Callout title="Point smoke at your app">The generated `tests/smoke.yaml` launches a placeholder
+`command: "./myapp"`. Edit `command` (and `args`) to your binary, then run.</Callout>
 
 </StepBlock>
 
@@ -79,6 +97,6 @@ env:
 
 </OutputBlock>
 
-Each run ends with an exit code: `0` all passed, `1` a test failed, `2` config/schema error, `3` launch/PTY error, `4` timeout with the hung process killed.
+Each run ends with an exit code: `0` all passed, `1` a test failed, `2` config/schema error, `3` launch/PTY error, `4` timeout with the hung process killed. Results land in `reports/results.json` (plus JUnit/HTML per your config), and every failed run retains a trace archive under `reports/traces/`.
 
 </StepBlock>
