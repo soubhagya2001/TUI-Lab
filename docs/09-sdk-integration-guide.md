@@ -34,6 +34,16 @@ keyword, JS trailing arg, Rust `press_delayed`/`type_text_delayed`) paces
 writes at the PTY layer (P5-E2, same `delay_ms` as the JSON protocol).
 `Runner.run("test.yaml")` shells `tuilab run` and
 returns parsed `reports/results.json`, raising on infra exit codes (2–4).
+Pass a reports directory — `reports_dir=` (Python), third argument (JS),
+`Runner::run_with_reports_dir` (Rust) — to isolate a run's artifacts under
+its own directory (it flows through as `tuilab run --output-dir`); parallel
+invocations from one CWD then never overwrite each other's results.
+
+Sessions never leak: every SDK has a drop guard that kills a forgotten
+sidecar, and the engine reaps the app under test with it (K4). Rust drops
+on scope exit, Python on garbage collection, JS via `await using` /
+`using` (`Symbol.asyncDispose` / `Symbol.dispose`). `close` remains the
+graceful path (quit bytes + bounded wait) and is idempotent.
 
 ```
 Python SDK ----+

@@ -51,6 +51,11 @@ tuilab trace reports/traces/search-flow.zip --replay-input
 # reports/attachments/<suite>/; every run appends reports/history.jsonl
 # (flake tracking surfaced in HTML reports).
 
+# Isolate this run's artifacts (results/junit/html/history/traces/
+# attachments) under another directory — concurrent runs sharing a CWD
+# (e.g. SDK `Runner.run` in parallel) then never clobber each other.
+tuilab run tests/ --output-dir reports/run-42
+
 # Step through a run interactively (Enter continues, q aborts; forces sequential)
 tuilab run tests/search.yaml --step
 

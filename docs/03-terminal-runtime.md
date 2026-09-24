@@ -118,6 +118,8 @@ Every write (paced or burst) is recorded as an input beat with a
 run-relative `at_ms` timestamp into `SuiteResult.input_trace` and the
 trace archive (`inputs.bin`), so `tuilab trace <zip> --replay-input`
 can reproduce original inter-key timing. MCP/proto/SDK surfaces accept
-optional `delay_ms` on press/type for the same purpose.
+optional `delay_ms` on press/type for the same purpose: a press delay is
+the pause before that write, a type delay is the gap between characters
+(the pause before typed text still comes from `timing.input_delay`).
 
 See `04-test-protocol-spec.md` (`wait_for_text`) and `06-assertion-snapshot-engine.md`.

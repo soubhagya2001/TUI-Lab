@@ -92,6 +92,12 @@ steps:
   - type: { text: hello, delay: 50ms }  # overrides key_delay
 ```
 
+The two knobs stay independent: a `press` step's `delay` *is* its pre-write
+pause (overriding `input_delay`), while a `type` step's `delay` is only the
+inter-character gap (overriding `key_delay`) — the pause before a typed
+string still comes from `timing.input_delay`. MCP/proto/SDK `delay_ms`
+follows the same split.
+
 Every write is also recorded as a timed input beat for trace replay
 (see `03` §3.5 and `11`).
 

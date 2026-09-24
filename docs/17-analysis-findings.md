@@ -58,6 +58,34 @@ Rule: phases run in order; P5 items may be reordered by user priority after gril
 
 Maps to old enhancements: wire config + suite timeout (C5); polling asserts + regex-once (C2/R1); escape screens (S5); `clamp_dims` in both `resize()` paths (R6); `thiserror` + `#[source]` and enum exit codes (R5).
 
+Follow-up audit pass (2026-09-24) re-verified every row against the tree:
+P0 (S1–S5, C1–C5), P1 (R1–R9), P2 (K1–K2), P3 (D1–D4), P4 (I1–I5) are
+implemented with regression tests. Five items were not, and are now fixed:
+
+* **R10** — `pump_once` no longer stamps `last_active`; reads are not usage.
+  Client-driven paths (writes, resize, launch response) stamp explicitly via
+  `get_mut`/the launch path, so in-flight waits still survive a concurrent
+  reap. Tests: `core/tests/sessions.rs::pump_once_does_not_refresh_activity`,
+  `::client_access_refreshes_activity`, `mcp/tests/mcp_tools.rs::idle_sessions_reaped_on_tool_entry`.
+* **R11** — the last production `expect` (default allowlist `OnceLock`) now
+  fails **closed** to a deny-all list instead of panicking the MCP server.
+* **K3** — `tuilab run --output-dir DIR` rebases every artifact (results,
+  junit, html, history, traces, attachments); all three SDKs expose it
+  (`reports_dir=` / third arg / `Runner::run_with_reports_dir`) so parallel
+  runs in one CWD stop clobbering each other. Tests: `cli_e2e.rs::output_dir_rebases_every_report_artifact`
+  plus per-SDK isolation tests.
+* **K4** — leak guards everywhere: `PtySession::drop` kills a never-closed
+  child, and each SDK kills a forgotten sidecar (Rust `Drop`, Python
+  `__del__`, JS `Symbol.dispose`/`Symbol.asyncDispose`). Tests:
+  `sdks/rust/tests/leak_guard.rs`, `test_sdk_surface.py::test_dropped_connection_kills_the_sidecar`,
+  JS `Symbol.dispose kills a forgotten sidecar`.
+* **K5** — a PR-time `pack-gate` CI job runs `bump_versions.py --check`
+  (all 7 sites) plus real wheel/npm pack dry-runs, so drift fails on the PR
+  instead of at release; the JS SDK no longer collapses unknown arches to x64.
+
+Still open (accepted, see the audit rows): D4's `.agents/skills/` gitignore
+exception is intentionally not applied (skills stay untracked by decision).
+
 ## 17.3 Phase P2 — SDK / packaging
 
 | # | Finding |
@@ -96,3 +124,8 @@ Tracked-but-ignored watchlist (verified clean 2026-09-21 — re-check before eac
 Locators/role + a11y-tree dump · trace viewer (`trace.zip`: timeline + raw bytes + replay) · `record --target=python|js|rust` + mouse synthesis · fixtures/sharding (`--shard`, `--retries`, `skip/focus`, tags) · pixel/Sixel diff · fake timers + fetch stubs · perf budgets (`startup/render/latency`) · scrollback search, clipboard, hover/drag, resize-matrix helper · report attachments + waterfall + flake history · MCP `tui_resize` (real tool, not the `web-guide/search.ts:47` invention) + audit logging.
 
 Status (grilled program order A→E2): A fixtures ✓ · B1 trace ✓ · B2 reports ✓ · C1 record ✓ · C2 terminal ✓ · D1 pixel/Sixel ✓ · D2 budgets ✓ · **E1 a11y/role ✓** · **E2 timing ✓ (P5 complete)**.
+
+Follow-up on E2: a per-step `type` `delay` is now the inter-character gap
+only — the pre-write pause comes from `timing.input_delay` — and the runner
+sleeps *between* characters instead of after the last one, matching the MCP,
+proto, and SDK `type` paths. See `05` §5.3 and `03` §3.5.
