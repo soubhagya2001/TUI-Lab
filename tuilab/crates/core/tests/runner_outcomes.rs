@@ -602,3 +602,41 @@ steps:
             .collect::<Vec<_>>()
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn type_delay_paces_characters_without_a_leading_pause() {
+    // E2: a per-step `type` delay is the inter-character gap only. It used
+    // to double as the pre-write pause, so `delay` overrode both
+    // `timing.key_delay` and `timing.input_delay` at once.
+    let file = TestFile::from_yaml(&format!(
+        r#"
+schema: tui-lab/v1
+name: type-delay
+application:
+  command: "{}"
+steps:
+  - wait_for_text:
+      text: "TUI-LAB-SAMPLE"
+  - type:
+      text: table
+      delay: 60ms
+  - press: q
+"#,
+        fixture_bin()
+    ))
+    .expect("parse");
+    let result = run_file(&file, &opts()).await.expect("run completes");
+    assert!(result.passed, "suite must pass: {:?}", result.failure);
+    let step = result
+        .steps
+        .iter()
+        .find(|step| step.detail.contains("typed"))
+        .expect("type step recorded");
+    // 4 inter-character gaps x 60ms = 240ms; a doubled leading pause (the
+    // old behavior) would add 60ms, and a trailing sleep another 60ms.
+    assert!(
+        (200..=300).contains(&step.duration_ms),
+        "type step paces gaps only, took {}ms",
+        step.duration_ms
+    );
+}

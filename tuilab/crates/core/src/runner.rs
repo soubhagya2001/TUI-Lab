@@ -405,16 +405,21 @@ async fn write_input(
     match between {
         Some(gap) if !gap.is_zero() => {
             // Character-oriented pacing: write UTF-8 chunks split on char
-            // boundaries so multi-byte sequences never tear.
-            for chunk in char_chunks(bytes) {
-                if !chunk.is_empty() {
-                    session
-                        .pty
-                        .write_all(chunk)
-                        .map_err(|e| CoreError::Pty(e.to_string()))?;
-                    session.ctx.record_input(chunk);
+            // boundaries so multi-byte sequences never tear. The gap sits
+            // *between* characters (no trailing sleep), matching the MCP,
+            // proto, and SDK `type` implementations.
+            for (i, chunk) in char_chunks(bytes).into_iter().enumerate() {
+                if chunk.is_empty() {
+                    continue;
+                }
+                if i > 0 {
                     tokio::time::sleep(gap).await;
                 }
+                session
+                    .pty
+                    .write_all(chunk)
+                    .map_err(|e| CoreError::Pty(e.to_string()))?;
+                session.ctx.record_input(chunk);
             }
         }
         _ => {
@@ -643,7 +648,11 @@ async fn run_step(session: &mut Session<'_>, step: &Step) -> Result<StepOutcome>
         }
         Step::Type(typed) => {
             let bytes = encode_text(&typed.text);
-            let before = typed.delay.or(session.timing.input_delay);
+            // E2: a per-step `delay` is the inter-character gap only
+            // (protocol docs: overrides `timing.key_delay`); the pre-write
+            // pause comes from the suite's `timing.input_delay` so the two
+            // knobs stay independent.
+            let before = session.timing.input_delay;
             let between = typed.delay.or(session.timing.key_delay);
             write_input(session, &bytes, before, between).await?;
             session
