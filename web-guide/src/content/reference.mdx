@@ -1,0 +1,63 @@
+import { Callout } from '../components/callout-code-tabs';
+import { Snippet } from '../components/code-block';
+
+# Architecture & reference
+
+This page connects the practical guide to the repository's deeper application
+contracts. The CLI, MCP server, and SDKs all use the same protocol and runtime;
+they are adapters, not separate implementations.
+
+## Three layers
+
+1. **Integration**: `tuilab`, `tuilab-mcp`, and the Python, JavaScript, and Rust
+   SDKs.
+2. **Protocol**: launch, input, wait, inspect, assert, snapshot, resize, and
+   close actions exchanged as YAML, JSON-lines, or MCP tool calls.
+3. **Runtime**: process supervision, PTY/ConPTY, terminal emulation, input
+   encoding, screen capture, assertions, and artifacts.
+
+<Callout title="One engine">A suite written in YAML, a call made through MCP, and an SDK session should produce the same runtime behavior. When they differ, treat it as a contract bug.</Callout>
+
+## Protocol and configuration
+
+The JSON-lines engine accepts one action per input line and returns one JSON
+reply per line:
+
+<Snippet label="json" code={`{"action":"launch","command":"./myapp","terminal":{"width":120,"height":40}}
+{"action":"wait_for_text","session_id":"sess_001","text":"Ready"}
+{"action":"close","session_id":"sess_001","signal":"q"}`} />
+
+YAML suites add setup, cleanup, tags, snapshots, budgets, and timing around the
+same runtime operations. Unknown fields are rejected by the Rust parser. The
+checked-in schema is intended for editor and CI validation as well.
+
+<Snippet label="bash" code={`tuilab --help
+tuilab run --help
+tuilab report --format html --out reports/index.html
+tuilab trace reports/traces/search-flow.zip --replay`} />
+
+## Runtime behavior
+
+The process supervisor owns launch, timeout, cleanup, and exit status. The PTY
+adapter gives the application a real terminal on Unix or ConPTY on Windows.
+The terminal layer parses ANSI output into a grid, while the assertion and
+reporting layers consume that grid without knowing which framework created it.
+
+Resize and redraw are asynchronous. Synchronize after input or resize with a
+wait rather than a fixed sleep. A failed run retains the last screen, input
+history, step timings, and optional raw trace data for diagnosis.
+
+## Cross-platform expectations
+
+The supported release targets are Windows x64, Linux x64, and macOS arm64.
+Key encoding, resize timing, process cleanup, and terminal dimensions are the
+areas most likely to differ between hosts. Keep suites text-synchronized,
+exercise the terminal sizes your users depend on, and run the same suite on
+each target before release.
+
+## Product boundaries
+
+The current product is CLI-first with MCP and sidecar SDK integrations. Remote
+HTTP/WS execution, a visual studio, framework-specific semantic adapters, and
+broader clipboard or scrollback support are separate future capabilities. The
+black-box YAML and protocol paths remain the compatibility baseline.

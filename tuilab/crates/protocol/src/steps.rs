@@ -498,7 +498,7 @@ impl<'de> Deserialize<'de> for Step {
         match key.as_str() {
             "press" => parse_press(value).map(Step::Press),
             "type" => parse_type(value).map(Step::Type),
-            "wait_for_text" => convert::<WaitForText>(value).map(Step::WaitForText),
+            "wait_for_text" => parse_wait_for_text(value).map(Step::WaitForText),
             "sleep" => convert::<SleepFor>(value).map(Step::Sleep),
             "resize" => convert::<ResizeTo>(value).map(Step::Resize),
             "assert_text" => convert::<TextAssertion>(value).map(Step::AssertText),
@@ -534,6 +534,18 @@ fn parse_type(value: serde_yaml::Value) -> std::result::Result<TypeFor, String> 
         return Ok(TypeFor::text(text));
     }
     convert::<TypeFor>(value)
+}
+
+/// `wait_for_text`: scalar text or `{ text, timeout, regex }` map.
+fn parse_wait_for_text(value: serde_yaml::Value) -> std::result::Result<WaitForText, String> {
+    if let Ok(text) = convert::<String>(value.clone()) {
+        return Ok(WaitForText {
+            text,
+            regex: false,
+            timeout: None,
+        });
+    }
+    convert::<WaitForText>(value)
 }
 
 impl<'de> Deserialize<'de> for SuiteAssertion {

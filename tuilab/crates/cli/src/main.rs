@@ -57,7 +57,7 @@ enum Commands {
         #[arg(long, value_name = "DIR")]
         output_dir: Option<PathBuf>,
     },
-    /// Re-render stored results (junit for now).
+    /// Re-render stored results as JUnit or HTML.
     Report {
         /// Output format.
         #[arg(long, default_value = "junit")]

@@ -42,6 +42,11 @@ const CORPUS: StoredEntry[] = [
     text: 'copy paste recipes examples search flow golden approval mask new file budgets startup step suite CI shard matrix artifacts upload parallel output-dir reports_dir isolation flaky retries history waterfall waterfall timing replay heisenbug role button assert_region cleanup wait_for_text a11y',
   },
   {
+    path: '/reference',
+    title: 'Architecture & reference',
+    text: 'architecture protocol JSON-lines runtime PTY ConPTY configuration design source reports schema cross-platform packaging release layers',
+  },
+  {
     path: '/cli-reference',
     title: 'CLI reference',
     text: 'init run record report trace proto flags parallel tags shard retries resize-matrix step debug terminal tuilab.yaml exit codes CI junit html history flaky artifacts',

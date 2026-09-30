@@ -175,6 +175,27 @@ assertions:
 }
 
 #[test]
+fn scalar_wait_for_text_parses() {
+    let yaml = r#"
+schema: tui-lab/v1
+name: Scalar wait
+application:
+  command: "./myapp"
+steps:
+- wait_for_text: "Ready"
+"#;
+    let file = TestFile::from_yaml(yaml).expect("parse scalar wait");
+    match &file.steps[0] {
+        Step::WaitForText(wait) => {
+            assert_eq!(wait.text, "Ready");
+            assert!(!wait.regex);
+            assert!(wait.timeout.is_none());
+        }
+        other => panic!("expected wait_for_text, got {other:?}"),
+    }
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let yaml = "schema: tui-lab/v9\nname: x\napplication:\n  command: y\nsteps: []\n";
     assert!(TestFile::from_yaml(yaml).is_err());

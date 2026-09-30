@@ -83,10 +83,11 @@ Full walkthroughs live in the [developer guide](https://soubhagya2001.github.io/
 
 ## Components
 
-*   **`tuilab`** — CLI: `init`, `run` (sequential + `--parallel`), `record`,
-    `report` (HTML/JUnit), `debug`, `step`, `proto` (JSON-lines engine mode).
+*   **`tuilab`** — CLI: `init`, `run` (sequential + `--parallel`, `--debug`,
+    `--step`), `record`, `report` (HTML/JUnit), `proto` (JSON-lines engine
+    mode), and `trace` replay.
     Configured via `tuilab.yaml`.
-*   **`tuilab-mcp`** — MCP server: nine `tui_*` tools for AI assistants, with
+*   **`tuilab-mcp`** — MCP server: ten `tui_*` tools for AI assistants, with
     allowlist + project-folder jail, secret redaction, 8-session cap.
 *   **SDKs** — thin sidecars over `tuilab proto`: `tui-lab` (Python),
     `@tui-lab/sdk` (TypeScript), `tui-lab-sdk` (Rust).

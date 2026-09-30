@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://tui-lab.dev/schemas/test-schema-v1.json",
-  "title": "TUI Lab test suite (v1 skeleton — full schema arrives in Phase 2)",
+  "title": "TUI Lab test suite (v1)",
   "description": "Portable test definition per docs/05-test-definition-dsl.md.",
   "type": "object",
   "required": ["schema", "name", "application", "steps"],
@@ -21,7 +21,10 @@
       },
       "additionalProperties": false
     },
-    "environment": { "type": "object" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
     "terminal": {
       "type": "object",
       "properties": {
@@ -31,46 +34,19 @@
       },
       "additionalProperties": false
     },
-    "setup": { "type": "array" },
+    "setup": { "$ref": "#/$defs/steps" },
     "steps": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "minProperties": 1,
-        "properties": {
-          "press": {
-            "oneOf": [
-              { "type": "string" },
-              {
-                "type": "object",
-                "required": ["key"],
-                "properties": {
-                  "key": { "type": "string" },
-                  "delay": { "type": "string" }
-                },
-                "additionalProperties": false
-              }
-            ]
-          },
-          "type": {
-            "oneOf": [
-              { "type": "string" },
-              {
-                "type": "object",
-                "required": ["text"],
-                "properties": {
-                  "text": { "type": "string" },
-                  "delay": { "type": "string" }
-                },
-                "additionalProperties": false
-              }
-            ]
-          }
-        }
-      }
+      "$ref": "#/$defs/steps"
     },
-    "cleanup": { "type": "array" },
-    "assertions": { "type": "array" },
+    "cleanup": { "$ref": "#/$defs/steps" },
+    "assertions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/suiteAssertion" }
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "skip": { "type": "boolean" },
+    "focus": { "type": "boolean" },
+    "attachments": { "type": "array", "items": { "type": "string" } },
     "budgets": {
       "type": "object",
       "properties": {
@@ -89,5 +65,247 @@
       "additionalProperties": false
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "duration": { "type": "string", "minLength": 1 },
+    "steps": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/pressStep" },
+          { "$ref": "#/$defs/typeStep" },
+          { "$ref": "#/$defs/waitForTextStep" },
+          { "$ref": "#/$defs/sleepStep" },
+          { "$ref": "#/$defs/resizeStep" },
+          { "$ref": "#/$defs/assertTextStep" },
+          { "$ref": "#/$defs/expectStep" },
+          { "$ref": "#/$defs/assertRegionStep" },
+          { "$ref": "#/$defs/snapshotStep" },
+          { "$ref": "#/$defs/screenshotStep" },
+          { "$ref": "#/$defs/waitForExitStep" }
+        ]
+      }
+    },
+    "singleKey": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1
+    },
+    "pressStep": {
+      "allOf": [
+        { "$ref": "#/$defs/singleKey" },
+        {
+          "type": "object",
+          "required": ["press"],
+          "properties": {
+            "press": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["key"],
+                  "properties": {
+                    "key": { "type": "string", "minLength": 1 },
+                    "delay": { "$ref": "#/$defs/duration" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "typeStep": {
+      "allOf": [
+        { "$ref": "#/$defs/singleKey" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["text"],
+                  "properties": {
+                    "text": { "type": "string" },
+                    "delay": { "$ref": "#/$defs/duration" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "waitForTextStep": {
+      "type": "object",
+      "required": ["wait_for_text"],
+      "properties": {
+        "wait_for_text": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "object",
+              "required": ["text"],
+              "properties": {
+                "text": { "type": "string", "minLength": 1 },
+                "regex": { "type": "boolean" },
+                "timeout": { "$ref": "#/$defs/duration" }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "sleepStep": {
+      "type": "object",
+      "required": ["sleep"],
+      "properties": { "sleep": { "$ref": "#/$defs/duration" } },
+      "additionalProperties": false
+    },
+    "resizeStep": {
+      "type": "object",
+      "required": ["resize"],
+      "properties": {
+        "resize": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 200 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "assertTextStep": {
+      "type": "object",
+      "required": ["assert_text"],
+      "properties": { "assert_text": { "$ref": "#/$defs/textAssertion" } },
+      "additionalProperties": false
+    },
+    "expectStep": {
+      "type": "object",
+      "required": ["expect"],
+      "properties": { "expect": { "$ref": "#/$defs/textAssertion" } },
+      "additionalProperties": false
+    },
+    "assertRegionStep": {
+      "type": "object",
+      "required": ["assert_region"],
+      "properties": {
+        "assert_region": {
+          "type": "object",
+          "required": ["x", "y", "width", "height", "contains"],
+          "properties": {
+            "x": { "type": "integer", "minimum": 0 },
+            "y": { "type": "integer", "minimum": 0 },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 },
+            "contains": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "snapshotStep": {
+      "type": "object",
+      "required": ["snapshot"],
+      "properties": { "snapshot": { "$ref": "#/$defs/snapshot" } },
+      "additionalProperties": false
+    },
+    "screenshotStep": {
+      "type": "object",
+      "required": ["screenshot"],
+      "properties": { "screenshot": { "$ref": "#/$defs/snapshot" } },
+      "additionalProperties": false
+    },
+    "waitForExitStep": {
+      "type": "object",
+      "required": ["wait_for_exit"],
+      "properties": {
+        "wait_for_exit": {
+          "type": "object",
+          "required": ["timeout"],
+          "properties": { "timeout": { "$ref": "#/$defs/duration" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "textAssertion": {
+      "type": "object",
+      "properties": {
+        "contains": { "type": "string" },
+        "not_contains": { "type": "string" },
+        "regex": { "type": "string" },
+        "exact_text": { "type": "string" },
+        "cursor": {
+          "type": "object",
+          "required": ["row", "col"],
+          "properties": {
+            "row": { "type": "integer", "minimum": 0 },
+            "col": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "exit_code": { "type": "integer" },
+        "not_crashed": { "type": "boolean" },
+        "screen_changed": { "type": "boolean" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "role": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "mask": { "type": "array", "items": { "type": "string" } },
+        "styled": { "type": "boolean" },
+        "graphics": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "suiteAssertion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["exit_code"],
+          "properties": { "exit_code": { "type": "integer" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["assert_exit_code"],
+          "properties": { "assert_exit_code": { "type": "integer" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["process_not_crashed"],
+          "properties": { "process_not_crashed": { "type": "boolean" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["assert_process_not_crashed"],
+          "properties": { "assert_process_not_crashed": { "type": "boolean" } },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }
